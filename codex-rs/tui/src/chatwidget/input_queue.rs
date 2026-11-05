@@ -52,6 +52,8 @@ pub(super) struct InputQueueState {
     pub(super) suppress_queue_autosend: bool,
     /// Independent of settings suppression, which a drained event can set.
     pub(super) resume_handoff: std::sync::Weak<()>,
+    /// Quota hold is independent of manual pauses and uncertain delivery.
+    pub(super) quota_exhausted: bool,
     pub(super) transcript_copy: std::sync::Weak<crate::copy_input_guard::CopyInputGuard>,
     /// Hold submissions while a usage failure or backend-directed model fallback is resolved.
     pub(super) rate_limit_recovery_pending: bool,
@@ -73,6 +75,7 @@ impl InputQueueState {
 
     pub(super) fn submissions_paused(&self) -> bool {
         self.suppress_queue_autosend
+            || self.quota_exhausted
             || self.transcript_copy.strong_count() > 0
             || self.resume_handoff.strong_count() > 0
             || self.failed_before_send
@@ -90,6 +93,7 @@ impl InputQueueState {
 
     pub(super) fn clear(&mut self) {
         self.startup_submission = None;
+        self.quota_exhausted = false;
         self.recovered_queue = false;
         self.queued_user_messages.clear();
         self.queued_user_message_history_records.clear();
