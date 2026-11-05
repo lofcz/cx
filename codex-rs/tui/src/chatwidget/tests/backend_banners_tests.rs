@@ -211,7 +211,7 @@ async fn backend_banner_restores_only_programmatically_displaced_switch_prompt()
         chat.has_chatgpt_account = true;
         chat.on_rate_limit_snapshot(Some(snapshot(/*percent*/ 95.0)));
         chat.maybe_show_pending_rate_limit_prompt();
-        assert!(render_bottom_popup(&chat, /*width*/ 90).contains("Approaching rate limits"));
+        assert!(render_bottom_popup(&chat, /*width*/ 90).contains("Usage limit reached"));
         if user_dismissed {
             chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         }
@@ -224,7 +224,7 @@ async fn backend_banner_restores_only_programmatically_displaced_switch_prompt()
         response.rate_limit_upsell = None;
         chat.update_backend_banner(&response);
         assert_eq!(
-            render_bottom_popup(&chat, /*width*/ 90).contains("Approaching rate limits"),
+            render_bottom_popup(&chat, /*width*/ 90).contains("Usage limit reached"),
             !user_dismissed
         );
     }

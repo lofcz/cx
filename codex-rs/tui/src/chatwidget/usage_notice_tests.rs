@@ -8,6 +8,7 @@ use crate::tui::FrameRequester;
 use chrono::TimeZone;
 use codex_app_server_protocol::RateLimitReachedType;
 use pretty_assertions::assert_eq;
+use ratatui::style::Stylize;
 
 fn snapshot(used_percent: i32) -> RateLimitSnapshot {
     serde_json::from_value(serde_json::json!({
