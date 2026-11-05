@@ -84,6 +84,7 @@ pub(crate) struct ComposerRenderOptions<'a> {
     pub(crate) stream_interrupt_key: Option<ShortcutHint>,
     pub(crate) working_tip: Option<&'a crate::turn_tip::TurnTip>,
     pub(crate) warning_count: usize,
+    pub(crate) usage_indicator: Option<crate::bottom_pane::UsageIndicator>,
     pub(crate) textarea_right_reserve: u16,
     /// Fullscreen scales the footer cap with the composer budget. Inline scrollback allows two rows.
     pub(crate) separate_status_line: bool,
