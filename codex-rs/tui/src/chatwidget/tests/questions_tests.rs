@@ -892,8 +892,8 @@ async fn questions_and_queued_messages_share_the_resolved_shortcut() {
         .queued_user_messages
         .push_back(UserMessage::from("queued".to_string()).into());
     chat.refresh_pending_input_preview();
-    let forward_hint = key_hint::shift(KeyCode::Left).display_label();
-    let backward_hint = key_hint::shift(KeyCode::Right).display_label();
+    let forward_hint = key_hint::ctrl_alt(KeyCode::Up).display_label();
+    let backward_hint = key_hint::ctrl_alt(KeyCode::Down).display_label();
     assert!(
         render_bottom_popup(&chat, /*width*/ 100)
             .contains(&format!("{forward_hint} edit last queued message"))
@@ -903,21 +903,15 @@ async fn questions_and_queued_messages_share_the_resolved_shortcut() {
         render_bottom_popup(&chat, /*width*/ 100).contains(&format!("{forward_hint} to answer"))
     );
 
-    for (forward, backward) in [
-        (
-            KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT),
-            KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT),
-        ),
-        (
-            KeyEvent::new(KeyCode::Up, KeyModifiers::ALT),
-            KeyEvent::new(KeyCode::Down, KeyModifiers::ALT),
-        ),
-    ] {
+    for (forward, backward) in [(
+        KeyEvent::new(KeyCode::Up, KeyModifiers::CONTROL | KeyModifiers::ALT),
+        KeyEvent::new(KeyCode::Down, KeyModifiers::CONTROL | KeyModifiers::ALT),
+    )] {
         chat.handle_key_event(forward);
         let rendered = render_bottom_popup(&chat, /*width*/ 100);
         assert!(rendered.contains(&format!("{backward_hint} main prompt")));
         assert!(rendered.contains(&format!("{forward_hint} next question")));
-        if forward.code == KeyCode::Left {
+        if forward.code == KeyCode::Up {
             insta::assert_snapshot!(
                 "question_queue_hint_Left",
                 render_bottom_popup(&chat, /*width*/ 100)
@@ -948,7 +942,10 @@ prompt_stack_back = ["alt-down", "shift-right"]
     assert!(
         render_bottom_popup(&chat, /*width*/ 100).contains(&format!("{forward_hint} to answer"))
     );
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     insta::assert_snapshot!(
         "question_queue_hint_Up",
         render_bottom_popup(&chat, /*width*/ 100)

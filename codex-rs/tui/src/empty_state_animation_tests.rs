@@ -28,7 +28,7 @@ fn first_screen_stage_ignores_notices_and_hides_instead_of_shrinking() {
                 Some(ComposerState::Empty),
                 MotionMode::Animated
             ),
-            None
+            Some(FRAME_INTERVAL)
         );
         assert_eq!(
             animation.stage,
@@ -63,144 +63,91 @@ fn first_screen_stage_ignores_notices_and_hides_instead_of_shrinking() {
 }
 
 #[test]
-fn first_screen_single_click_replays_the_visible_blossom() {
+fn cc_idle_rotation_pauses_with_a_draft_and_resumes_without_hidden_time() {
     let mut animation = EmptyStateAnimation::default();
     animation.start_fresh();
-    let screen = Rect::new(
-        /*x*/ 0, /*y*/ 0, /*width*/ 80, /*height*/ 44,
-    );
+    let screen = Rect::new(0, 0, 80, 44);
     let mut buffer = Buffer::empty(screen);
+    let start = Instant::now();
+    let draw = |animation: &mut EmptyStateAnimation, buffer: &mut Buffer, composer, now| {
+        buffer.reset();
+        animation.render_first_screen_at(
+            screen,
+            screen,
+            buffer,
+            composer,
+            MotionMode::Animated,
+            now,
+        )
+    };
+    assert_eq!(
+        draw(
+            &mut animation,
+            &mut buffer,
+            Some(ComposerState::Empty),
+            start
+        ),
+        Some(FRAME_INTERVAL)
+    );
+    let first = buffer.clone();
+    assert_eq!(
+        draw(
+            &mut animation,
+            &mut buffer,
+            Some(ComposerState::Empty),
+            start + Duration::from_secs(1)
+        ),
+        Some(FRAME_INTERVAL)
+    );
+    assert_ne!(buffer, first);
+    let elapsed = animation.spin_elapsed;
+    assert_eq!(
+        draw(
+            &mut animation,
+            &mut buffer,
+            Some(ComposerState::Draft),
+            start + Duration::from_secs(2)
+        ),
+        None
+    );
+    assert_eq!(buffer, Buffer::empty(screen));
+    assert_eq!(
+        draw(
+            &mut animation,
+            &mut buffer,
+            Some(ComposerState::Empty),
+            start + Duration::from_secs(60)
+        ),
+        Some(FRAME_INTERVAL)
+    );
+    assert_eq!(animation.spin_elapsed, elapsed);
     let click = MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Left),
         column: 40,
         row: 22,
         modifiers: KeyModifiers::NONE,
     };
-    let draw = |animation: &mut EmptyStateAnimation, buffer: &mut Buffer, composer| {
-        buffer.reset();
-        animation.render_first_screen(screen, screen, buffer, composer, MotionMode::Animated)
-    };
-    assert_eq!(
-        draw(&mut animation, &mut buffer, Some(ComposerState::Empty)),
-        None
-    );
-    let static_frame = buffer.clone();
-    for other in [
-        MouseEvent {
-            column: 0,
-            row: 0,
-            ..click
-        },
-        MouseEvent {
-            modifiers: KeyModifiers::CONTROL,
-            ..click
-        },
-        MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Right),
-            ..click
-        },
-    ] {
-        assert!(!animation.handle_mouse(other));
-    }
-    assert_eq!(
-        draw(&mut animation, &mut buffer, Some(ComposerState::Empty)),
-        None
-    );
-    assert_eq!(buffer, static_frame);
     assert!(animation.handle_mouse(click));
-    // Release belongs to the transcript if it started a selection outside the logo.
-    assert!(!animation.handle_mouse(MouseEvent {
-        kind: MouseEventKind::Up(MouseButton::Left),
-        ..click
-    }));
     assert_eq!(
-        draw(&mut animation, &mut buffer, Some(ComposerState::Empty)),
-        Some(FRAME_INTERVAL)
-    );
-    assert_eq!(buffer, static_frame);
-    let started = animation.last_frame.unwrap();
-    let stage = animation.stage.unwrap();
-    buffer.reset();
-    assert_eq!(
-        animation.render_in_at(
-            stage,
+        draw(
+            &mut animation,
             &mut buffer,
-            Presentation::Animated,
-            started + sequence::STATIC_FADE,
+            Some(ComposerState::Empty),
+            start + Duration::from_secs(61)
         ),
         Some(FRAME_INTERVAL)
     );
-    assert_ne!(buffer, static_frame);
-    assert!(animation.handle_mouse(click));
-    assert_eq!(
-        draw(&mut animation, &mut buffer, Some(ComposerState::Empty)),
-        Some(FRAME_INTERVAL)
-    );
-    assert_eq!(buffer, static_frame);
-    let finished_at =
-        animation.last_frame.unwrap() + sequence::SPIN_DURATION - animation.spin_elapsed;
-    let mut fade_frames = Vec::new();
-    for elapsed in [
-        Duration::ZERO,
-        sequence::STATIC_FADE / 2,
-        sequence::STATIC_FADE,
-    ] {
-        buffer.reset();
-        crate::terminal_palette::with_test_default_colors(
-            crate::terminal_probe::DefaultColors {
-                fg: (210, 221, 235),
-                bg: (15, 20, 37),
-            },
-            || {
-                assert_eq!(
-                    animation.render_in_at(
-                        stage,
-                        &mut buffer,
-                        Presentation::Animated,
-                        finished_at + elapsed,
-                    ),
-                    (elapsed < sequence::STATIC_FADE).then_some(FRAME_INTERVAL)
-                );
-            },
-        );
-        let painted = buffer
-            .content
-            .iter()
-            .find(|cell| cell.symbol() != " ")
-            .unwrap();
-        fade_frames.push(format!(
-            "{}ms: {} {:?}",
-            elapsed.as_millis(),
-            painted.symbol(),
-            painted.fg,
-        ));
-    }
-    insta::assert_snapshot!("first_screen_replay_fade", fade_frames.join("\n"));
-    assert_eq!(
-        draw(&mut animation, &mut buffer, Some(ComposerState::Empty)),
-        None
-    );
-    assert_eq!(buffer, static_frame);
-    assert!(!animation.replaying);
-    assert!(animation.handle_mouse(click));
-    assert_eq!(
-        draw(&mut animation, &mut buffer, Some(ComposerState::Draft)),
-        None
-    );
-    assert!(!animation.handle_mouse(click));
-    assert_eq!(
-        draw(&mut animation, &mut buffer, Some(ComposerState::Empty)),
-        None
-    );
-    assert_eq!(buffer, static_frame);
-    // Disabling motion removes both the logo and its click target.
     buffer.reset();
-    animation.render_first_screen(
-        screen,
-        screen,
-        &mut buffer,
-        Some(ComposerState::Empty),
-        MotionMode::Reduced,
+    assert_eq!(
+        animation.render_first_screen_at(
+            screen,
+            screen,
+            &mut buffer,
+            Some(ComposerState::Empty),
+            MotionMode::Reduced,
+            start + Duration::from_secs(62)
+        ),
+        None
     );
     assert_eq!(buffer, Buffer::empty(screen));
     assert!(!animation.handle_mouse(click));
@@ -222,7 +169,7 @@ fn loop_closes_and_light_themes_preserve_coverage() {
         first
     );
     let other_mark = renderer.frame(
-        /*columns*/ 60, /*rows*/ 21, /*phase*/ 0.5, &dark,
+        /*columns*/ 60, /*rows*/ 21, /*phase*/ 0.125, &dark,
     );
     assert!(first.iter().any(|cell| cell.dots != 0));
     assert!(other_mark.iter().any(|cell| cell.dots != 0));
