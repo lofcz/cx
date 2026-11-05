@@ -14,7 +14,7 @@ Both projects use the Apache-2.0 license. Their existing license and notices rem
   Recovery sends a queued follow-up first, or `Continue` when the queue is empty.
   **Ctrl+C**, manual submission, interruption, and session replacement cancel pending recovery.
   Manual pauses and uncertain delivery continue to block automatic submission.
-- Usage-limit failures preserve queued messages. A complete account quota refresh releases the quota hold when capacity returns.
+- ChatGPT usage-limit failures preserve queued messages. A complete account quota refresh releases the quota hold when capacity returns.
   Empty snapshots and unrelated model quotas do not release the hold. Manual pauses remain active.
 
 The header and overload recovery default to disabled. Enable them with:

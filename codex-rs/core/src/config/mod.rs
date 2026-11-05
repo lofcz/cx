@@ -875,11 +875,13 @@ pub struct Config {
     /// - `always`: Always use alternate screen.
     /// - `never`: Never use alternate screen (inline mode, preserves scrollback).
     pub tui_alternate_screen: AltScreenMode,
+    /// Show the compact composer header.
+    pub tui_status_header: bool,
+    /// Resume overloaded turns with bounded backoff.
+    pub tui_server_overloaded_resume: bool,
     /// Ordered list of status line item identifiers for the TUI.
     ///
     /// When unset, the TUI defaults to: `model-with-reasoning` and `current-dir`.
-    pub tui_status_header: bool,
-    pub tui_server_overloaded_resume: bool,
     pub tui_status_line: Option<Vec<String>>,
 
     /// Whether to color status line items with colors from the active syntax theme.
