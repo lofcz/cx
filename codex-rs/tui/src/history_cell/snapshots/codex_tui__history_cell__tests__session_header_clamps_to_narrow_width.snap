@@ -4,6 +4,6 @@ assertion_line: 1867
 expression: "render_lines(&lines).join(\"\\n\")"
 ---
 
-  >_ CC (vtest)
+  >_ CX (vtest)
      project
   permissions: YOLO mode

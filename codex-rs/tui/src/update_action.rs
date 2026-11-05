@@ -20,9 +20,9 @@ pub enum UpdateAction {
     PnpmGlobalLatest,
     /// Update via `brew upgrade codex`.
     BrewUpgrade,
-    /// Update via the CC standalone updater.
+    /// Update via the CX standalone updater.
     StandaloneUnix,
-    /// Update via the CC standalone updater on Windows.
+    /// Update via the CX standalone updater on Windows.
     StandaloneWindows,
 }
 
@@ -46,13 +46,13 @@ impl UpdateAction {
     /// Returns the list of command-line arguments for invoking the update.
     pub fn command_args(self) -> (&'static str, &'static [&'static str]) {
         match self {
-            UpdateAction::Daemon(source) => ("cc", source.command_args()),
+            UpdateAction::Daemon(source) => ("cx", source.command_args()),
             UpdateAction::NpmGlobalLatest => ("npm", &["install", "-g", "@openai/codex"]),
             UpdateAction::BunGlobalLatest => ("bun", &["install", "-g", "@openai/codex"]),
             UpdateAction::VitePlusGlobalLatest => ("vp", &["install", "-g", "@openai/codex"]),
             UpdateAction::PnpmGlobalLatest => ("pnpm", &["add", "-g", "@openai/codex"]),
             UpdateAction::BrewUpgrade => ("brew", &["upgrade", "--cask", "codex"]),
-            UpdateAction::StandaloneUnix | UpdateAction::StandaloneWindows => ("cc", &["update"]),
+            UpdateAction::StandaloneUnix | UpdateAction::StandaloneWindows => ("cx", &["update"]),
         }
     }
 
@@ -144,11 +144,11 @@ mod tests {
     fn standalone_update_commands_use_the_fork_updater() {
         assert_eq!(
             UpdateAction::StandaloneUnix.command_args(),
-            ("cc", &["update"][..])
+            ("cx", &["update"][..])
         );
         assert_eq!(
             UpdateAction::StandaloneWindows.command_args(),
-            ("cc", &["update"][..])
+            ("cx", &["update"][..])
         );
     }
 }

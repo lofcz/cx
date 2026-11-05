@@ -53,11 +53,11 @@ pub(crate) enum UpdateOutcome {
 pub(crate) async fn run(action: UpdateAction) -> Result<UpdateOutcome> {
     match (action, cfg!(windows)) {
         (UpdateAction::StandaloneWindows, true) | (UpdateAction::StandaloneUnix, false) => {}
-        _ => bail!("CC update action does not match the current platform"),
+        _ => bail!("CX update action does not match the current platform"),
     }
 
     let Some(target) = standalone_target() else {
-        bail!("this CC build target does not have a standalone release");
+        bail!("this CX build target does not have a standalone release");
     };
     let layout = install_layout(target)?;
     let http = RouteAwareClientPool::new_without_request_logging(
@@ -72,11 +72,11 @@ pub(crate) async fn run(action: UpdateAction) -> Result<UpdateOutcome> {
         && install::release_is_complete(&release_dir, target)?
     {
         install::activate_release(&layout, &release_dir)?;
-        println!("CC {version} is already up to date.");
+        println!("CX {version} is already up to date.");
         return Ok(UpdateOutcome::AlreadyUpToDate);
     }
 
-    println!("Downloading CC {version} for {target}...");
+    println!("Downloading CX {version} for {target}...");
     let checksums_url = format!(
         "https://github.com/{RELEASE_REPOSITORY}/releases/download/rust-v{version}/codex-package_SHA256SUMS"
     );
@@ -121,11 +121,11 @@ pub(crate) async fn run(action: UpdateAction) -> Result<UpdateOutcome> {
     install::replace_release_directory(&staging_dir, &release_dir)?;
     install::activate_release(&layout, &release_dir)?;
     println!(
-        "Installed CC {version} for {target} at {}",
+        "Installed CX {version} for {target} at {}",
         release_dir.display()
     );
     println!("Ensure {} is on your PATH.", layout.bin_dir.display());
-    println!("Restart any running CC processes to use this version.");
+    println!("Restart any running CX processes to use this version.");
     Ok(UpdateOutcome::Installed)
 }
 
@@ -153,14 +153,14 @@ fn install_layout(target: &str) -> Result<InstallLayout> {
             #[cfg(not(windows))]
             {
                 let _ = target;
-                bail!("CC standalone installation could not be detected");
+                bail!("CX standalone installation could not be detected");
             }
         };
     let Some(releases_dir) = release_dir.parent() else {
-        bail!("CC standalone release directory has no parent");
+        bail!("CX standalone release directory has no parent");
     };
     let Some(standalone_root) = releases_dir.parent() else {
-        bail!("CC standalone releases directory has no parent");
+        bail!("CX standalone releases directory has no parent");
     };
     let bin_dir = std::env::var_os("CODEX_INSTALL_DIR").map_or_else(home_local_bin, PathBuf::from);
     let bin_name = std::env::var("CODEX_BIN_NAME").unwrap_or_else(|_| "codex++".to_string());
@@ -175,7 +175,7 @@ fn install_layout(target: &str) -> Result<InstallLayout> {
 #[cfg(windows)]
 fn windows_release_dir(target: &str) -> Result<PathBuf> {
     let codex_home =
-        codex_core::config::find_codex_home().context("failed to locate the CC home directory")?;
+        codex_core::config::find_codex_home().context("failed to locate the CX home directory")?;
     let standalone_root = codex_home.join("packages/standalone");
     let releases_dir = standalone_root.join("releases");
     let current_release =
@@ -198,7 +198,7 @@ fn windows_release_dir(target: &str) -> Result<PathBuf> {
         .find(|candidate| install::validate_release(candidate, target).is_ok())
         .with_context(|| {
             format!(
-                "CC standalone installation could not be detected under {}",
+                "CX standalone installation could not be detected under {}",
                 releases_dir.display()
             )
         })
@@ -223,17 +223,17 @@ async fn latest_release_version(http: &RouteAwareClientPool) -> Result<String> {
         .timeout(METADATA_TIMEOUT)
         .send()
         .await
-        .context("failed to request the latest CC release")?
+        .context("failed to request the latest CX release")?
         .error_for_status()
-        .context("failed to resolve the latest CC release")?;
+        .context("failed to resolve the latest CX release")?;
     let release: GitHubRelease = response
         .json()
         .await
-        .context("failed to decode the latest CC release")?;
+        .context("failed to decode the latest CX release")?;
     let version = release
         .tag_name
         .strip_prefix("rust-v")
-        .context("latest CC release tag is not a fork release tag")?;
+        .context("latest CX release tag is not a fork release tag")?;
     Ok(version.to_string())
 }
 
