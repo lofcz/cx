@@ -509,6 +509,7 @@ impl ChatWidget {
     }
 
     fn on_interrupted_turn_with_id(&mut self, reason: TurnAbortReason, turn_id: Option<&str>) {
+        self.reset_overload_recovery();
         self.requeue_image_submission();
         // Finalize, log a gentle prompt, and clear running state.
         self.finalize_turn();
