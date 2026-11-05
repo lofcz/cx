@@ -3007,7 +3007,7 @@ fn footer_hint_lines(state: &PickerState, width: u16) -> Vec<Line<'static>> {
             key: crate::key_hint::ctrl(KeyCode::Char('r')).display_label(),
             wide_label: String::from("rename"),
             compact_label: String::from("rename"),
-            priority: 2,
+            priority: 3,
         });
     }
     if let Some(cancel) = state.keymap.list.primary_hint(ListAction::Cancel) {

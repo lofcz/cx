@@ -29,11 +29,24 @@ You can also pass `-c tui.status_header=true -c tui.server_overloaded_resume=tru
 Existing authentication, models, and session storage work without migration.
 Codex++ workflow orchestration and provider support remain available.
 
+## Local launcher
+
+`scripts/install/codex-plus-local.sh` launches the separately installed local package.
+It enables the header and overload recovery, and uses an embedded server for local sessions.
+An explicit `--remote` connection keeps its requested server.
+The launcher uses existing Codex configuration, authentication, and history.
+
+Install the launcher as `~/.local/bin/codex++`.
+Place the package entrypoint link at `${XDG_DATA_HOME:-$HOME/.local/share}/codex-plus/bin/codex++-binary`.
+The launcher directs binary updates to this separate installation directory.
+Source builds do not require a published GitHub release.
+
 ## Validate changes
 
 Run these commands from `codex-rs`:
 
 ```sh
+export RUST_MIN_STACK=8388608
 cargo fmt --all --check
 cargo test --locked -p codex-tui --lib codext_
 cargo test --locked -p codex-tui --lib resume_picker
