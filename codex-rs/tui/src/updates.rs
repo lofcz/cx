@@ -55,7 +55,7 @@ pub fn get_upgrade_version(config: &Config) -> Option<String> {
     })
 }
 
-const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/yuguorui/codex/releases/latest";
+const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/lofcz/codex-plus/releases/latest";
 
 #[derive(Deserialize, Debug, Clone)]
 struct ReleaseInfo {
