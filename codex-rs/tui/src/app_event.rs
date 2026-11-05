@@ -1848,6 +1848,13 @@ pub(crate) enum AppEvent {
     LaunchExternalEditor,
 
     /// Async update of the current git branch for status line rendering.
+    StatusHeaderGitStatusUpdated {
+        cwd: PathBuf,
+        summary: Option<crate::git_status::GitStatusSummary>,
+    },
+    ServerOverloadedRetry {
+        token: uuid::Uuid,
+    },
     StatusLineBranchUpdated {
         cwd: PathBuf,
         branch: Option<String>,

@@ -889,6 +889,8 @@ pub struct Config {
     /// Ordered list of status line item identifiers for the TUI.
     ///
     /// When unset, the TUI defaults to: `model-with-reasoning` and `current-dir`.
+    pub tui_status_header: bool,
+    pub tui_server_overloaded_resume: bool,
     pub tui_status_line: Option<Vec<String>>,
 
     /// Whether to color status line items with colors from the active syntax theme.
@@ -4938,6 +4940,8 @@ impl Config {
                 .as_ref()
                 .map(|t| t.alternate_screen)
                 .unwrap_or_default(),
+            tui_status_header: cfg.tui.as_ref().is_some_and(|t| t.status_header),
+            tui_server_overloaded_resume: cfg.tui.as_ref().is_some_and(|t| t.server_overloaded_resume),
             tui_status_line: cfg.tui.as_ref().and_then(|t| t.status_line.clone()),
             tui_status_line_use_colors: cfg
                 .tui

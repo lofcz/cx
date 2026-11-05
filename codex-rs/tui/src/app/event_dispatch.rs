@@ -3901,6 +3901,12 @@ impl App {
                     }
                 }
             }
+            AppEvent::StatusHeaderGitStatusUpdated { cwd, summary } => {
+                self.chat_widget.set_status_header_git_status(cwd, summary);
+            }
+            AppEvent::ServerOverloadedRetry { token } => {
+                self.chat_widget.on_server_overloaded_retry(token);
+            }
             AppEvent::StatusLineBranchUpdated { cwd, branch } => {
                 self.chat_widget.set_status_line_branch(cwd, branch);
                 self.refresh_status_line();
