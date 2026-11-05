@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   rebase:
+    if: github.repository == 'yuguorui/codex-plus'
     name: Rebase fork on upstream
     # codex-voice-host needs GStreamer >= 1.28 on linux-gnu; 24.04 only has 1.24.
     runs-on: ubuntu-26.04
