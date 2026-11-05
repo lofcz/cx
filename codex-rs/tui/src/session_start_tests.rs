@@ -190,7 +190,7 @@ fn session_start_error_surfaces_archived_guidance_without_rollout_path() {
 
         assert_eq!(
             session_start_error(action, &target_session, err).to_string(),
-            expected.replace("codex++ unarchive ", "cc unarchive ")
+            expected.replace("codex++ unarchive ", "cx unarchive ")
         );
     }
 }
