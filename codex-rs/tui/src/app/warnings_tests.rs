@@ -194,7 +194,7 @@ async fn warnings_hide_and_restore_draft_and_freeze_until_reopened() -> Result<(
 }
 
 #[tokio::test]
-async fn warnings_badge_and_pages_work_with_terminal_scrollback() -> Result<()> {
+async fn cc_warning_pages_work_without_a_badge_with_terminal_scrollback() -> Result<()> {
     let mut app = crate::app::test_support::make_test_app().await;
     let mut tui = crate::tui::test_support::make_test_tui()?;
     tui.set_owned_screen(/*owned*/ false)?;
@@ -208,7 +208,7 @@ async fn warnings_badge_and_pages_work_with_terminal_scrollback() -> Result<()> 
     let size = Size::new(/*width*/ 80, /*height*/ 24);
     app.render_chat_widget_frame(&mut tui, size)?;
     let before = crate::custom_terminal::test_support::last_rendered_buffer(&tui.terminal).clone();
-    assert!(before.content.iter().any(|cell| cell.symbol() == "⚠"));
+    assert!(!before.content.iter().any(|cell| cell.symbol() == "⚠"));
     app.chat_widget.open_warnings(&app.transcript_cells);
     app.render_chat_widget_frame(&mut tui, size)?;
     let buffer = crate::custom_terminal::test_support::last_rendered_buffer(&tui.terminal);

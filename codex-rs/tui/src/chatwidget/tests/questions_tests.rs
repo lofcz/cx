@@ -16,7 +16,10 @@ fn questions() -> Vec<AsyncUserInputQuestion> {
 async fn unavailable_send_keeps_answer_and_skip_remains_available() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.add_async_questions("message", &questions());
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     chat.bottom_pane.handle_paste("kept answer".into());
     chat.blocks_direct_input = true;
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
@@ -34,7 +37,10 @@ async fn accepted_question_answer_uses_existing_delivery_and_keeps_main_draft() 
             .set_composer_text("main draft".into(), Vec::new(), Vec::new());
         chat.input_queue.suppress_queue_autosend = queued;
         chat.add_async_questions("message", &questions());
-        chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+        chat.handle_key_event(KeyEvent::new(
+            KeyCode::Up,
+            KeyModifiers::CONTROL | KeyModifiers::ALT,
+        ));
         chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
         assert_eq!(question_count(&chat), 2);
         if !queued {
@@ -84,7 +90,10 @@ async fn async_question_answers_preserve_ambiguous_skill_selection_and_dismiss_r
     duplicate.path = test_path_buf("/tmp/other-route/SKILL.md").abs().into();
     chat.set_skills(Some(vec![skill.clone(), duplicate]));
     chat.add_async_questions("message", &questions());
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     chat.bottom_pane.handle_paste("Use $route".into());
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
     let Op::UserTurn { items, .. } = ops.try_recv().unwrap() else {
@@ -198,7 +207,10 @@ async fn queued_question_answer_preserves_other_questions_on_delivery() {
     chat.thread_id = Some(ThreadId::new());
     chat.input_queue.suppress_queue_autosend = true;
     chat.add_async_questions("old", &questions());
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     chat.bottom_pane.handle_paste("answer".into());
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
     assert_eq!(question_count(&chat), 1);
@@ -216,7 +228,10 @@ async fn recovered_question_answers_preserve_other_questions() {
         chat.thread_id = Some(ThreadId::new());
         chat.on_task_started();
         chat.add_async_questions("old", &questions());
-        chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+        chat.handle_key_event(KeyEvent::new(
+            KeyCode::Up,
+            KeyModifiers::CONTROL | KeyModifiers::ALT,
+        ));
         chat.bottom_pane.handle_paste("answer".into());
         chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
         assert_answer(op_rx.try_recv().unwrap(), "> Which way?\n\nanswer");
@@ -356,7 +371,10 @@ async fn reconnect_preserves_buffered_question_answer_source() {
     let (mut chat, _rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.thread_id = Some(ThreadId::new());
     chat.add_async_questions("old", &questions());
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     chat.bottom_pane.handle_paste("answer".into());
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
     assert_answer(op_rx.try_recv().unwrap(), "> Which way?\n\nanswer");
@@ -403,7 +421,7 @@ async fn disconnected_questions_remain_editable_without_sending() {
     chat.add_async_questions("message", &questions());
     chat.pause_for_disconnect();
     chat.handle_restricted_key(
-        KeyEvent::new(KeyCode::Up, KeyModifiers::ALT),
+        KeyEvent::new(KeyCode::Up, KeyModifiers::CONTROL | KeyModifiers::ALT),
         RestrictedInputMode::Disconnected,
     );
     chat.bottom_pane.handle_paste("offline draft".into());
@@ -444,7 +462,10 @@ async fn selected_answers_preserve_long_labels_and_reject_oversized_submissions(
             "message",
             &[question("What next?", Some(vec![label.clone()]))],
         );
-        chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+        chat.handle_key_event(KeyEvent::new(
+            KeyCode::Up,
+            KeyModifiers::CONTROL | KeyModifiers::ALT,
+        ));
         insta::assert_snapshot!(snapshot, render_bottom_popup(&chat, /*width*/ 80));
         let saved = question_count(&chat);
         chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
@@ -473,7 +494,10 @@ async fn question_inputs_support_vim_editing_and_search() {
         chat.show_welcome_banner = false;
         chat.bottom_pane.set_vim_enabled(/*enabled*/ true);
         chat.add_async_questions("message", &[question("Which way?", options.clone())]);
-        chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+        chat.handle_key_event(KeyEvent::new(
+            KeyCode::Up,
+            KeyModifiers::CONTROL | KeyModifiers::ALT,
+        ));
         if options.is_some() {
             chat.handle_key_event(KeyEvent::from(KeyCode::Char('2')));
         }
@@ -549,7 +573,10 @@ async fn question_history_search_uses_updated_bindings() {
         .unwrap();
         let keymap = RuntimeKeymap::from_config(&config).unwrap();
         chat.apply_keymap_update(config, &keymap);
-        chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+        chat.handle_key_event(KeyEvent::new(
+            KeyCode::Up,
+            KeyModifiers::CONTROL | KeyModifiers::ALT,
+        ));
         chat.bottom_pane.record_replayed_user_message_history(
             crate::bottom_pane::HistoryEntry::new("newest answer".into()),
         );
@@ -603,7 +630,10 @@ async fn question_editor_keeps_working_status_and_queued_messages_visible() {
         .push_back(UserMessage::from("queued follow-up".to_string()).into());
     chat.refresh_pending_input_preview();
     chat.add_async_questions("message", &questions());
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     let open = render_bottom_popup(&chat, /*width*/ 80);
     let open = open.split("\n  1 of 2").next().unwrap().trim_end();
     chat.bottom_pane.set_task_running(/*running*/ false);
@@ -626,7 +656,10 @@ async fn async_questions_reject_blank_answers_but_allow_explicit_skip() {
         let (mut chat, _rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
         chat.thread_id = Some(ThreadId::new());
         chat.add_async_questions("message", &[question("Which way?", options.clone())]);
-        chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+        chat.handle_key_event(KeyEvent::new(
+            KeyCode::Up,
+            KeyModifiers::CONTROL | KeyModifiers::ALT,
+        ));
         if options.is_some() {
             chat.handle_key_event(KeyEvent::from(KeyCode::Char('2')));
         }
@@ -665,7 +698,10 @@ fn open_questions(chat: &mut ChatWidget, options: Option<Vec<String>>) {
         "turn",
         /*from_replay*/ false,
     );
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     render_bottom_popup(chat, /*width*/ 80);
 }
 
@@ -678,13 +714,22 @@ async fn expanded_question_yields_mouse_to_terminal_for_links() {
     let url = "https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/r2/overview";
     chat.add_async_questions("message", &[question(url, /*options*/ None)]);
     assert_eq!(chat.mouse_capture(/*owned_screen*/ true), Inherit);
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     assert_eq!(chat.mouse_capture(/*owned_screen*/ true), Disabled);
     assert_eq!(chat.mouse_capture(/*owned_screen*/ false), Inherit);
-    chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Down,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     assert_eq!(chat.mouse_capture(/*owned_screen*/ true), Inherit);
 
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     chat.open_warnings(&[]);
     assert!(render_bottom_popup(&chat, /*width*/ 100).contains(url));
     assert_eq!(chat.mouse_capture(/*owned_screen*/ true), Disabled);
@@ -695,9 +740,15 @@ async fn question_queue_key_does_not_steer_the_running_turn() {
     let (mut chat, _rx, mut ops) = make_chatwidget_manual(/*model_override*/ None).await;
     open_questions(&mut chat, /*options*/ None);
     chat.on_task_started();
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     chat.bottom_pane.handle_paste("kept".into());
-    chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Down,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     chat.bottom_pane.handle_paste("  later  ".into());
     chat.handle_key_event(KeyEvent::from(KeyCode::Tab));
     assert_eq!(
@@ -759,7 +810,7 @@ async fn question_queue_pop_becomes_an_ordinary_composer_draft_and_clears_questi
             .push_back(UserMessage::from(text).into());
     }
     open_questions(&mut chat, /*options*/ None);
-    let forward = KeyEvent::new(KeyCode::Up, KeyModifiers::ALT);
+    let forward = KeyEvent::new(KeyCode::Up, KeyModifiers::CONTROL | KeyModifiers::ALT);
     chat.handle_key_event(forward);
     insta::assert_snapshot!(
         "last_question_with_queue",
@@ -796,7 +847,10 @@ async fn question_drafts_survive_navigation_and_snapshot_replay() {
         .set_composer_text("main draft".into(), Vec::new(), Vec::new());
     open_questions(&mut chat, /*options*/ None);
     chat.bottom_pane.handle_paste("first draft".into());
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     chat.handle_key_event(KeyEvent::from(KeyCode::Char('2')));
     chat.bottom_pane.handle_paste("second draft".into());
     let saved = chat.capture_thread_input_state();
@@ -835,9 +889,15 @@ async fn question_drafts_survive_navigation_and_snapshot_replay() {
     chat.handle_question_key(KeyEvent::from(KeyCode::Enter));
     assert_eq!(question_count(&chat), 3);
     assert!(ops.try_recv().is_err());
-    chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Down,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     assert!(render_bottom_popup(&chat, /*width*/ 80).contains("first draft"));
-    chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Down,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     assert_eq!(chat.bottom_pane.composer_text(), "main draft");
 }
 
@@ -846,7 +906,10 @@ async fn single_question_spacing_with_working_status() {
     let (mut chat, _rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.bottom_pane.set_task_running(/*running*/ true);
     chat.add_async_questions("single", &[question("Only question?", /*options*/ None)]);
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     chat.bottom_pane.handle_paste("A typed answer".into());
     let rendered = render_bottom_popup(&chat, /*width*/ 80);
     let rows: Vec<_> = rendered.lines().collect();
@@ -942,10 +1005,7 @@ prompt_stack_back = ["alt-down", "shift-right"]
     assert!(
         render_bottom_popup(&chat, /*width*/ 100).contains(&format!("{forward_hint} to answer"))
     );
-    chat.handle_key_event(KeyEvent::new(
-        KeyCode::Up,
-        KeyModifiers::CONTROL | KeyModifiers::ALT,
-    ));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
     insta::assert_snapshot!(
         "question_queue_hint_Up",
         render_bottom_popup(&chat, /*width*/ 100)
@@ -987,7 +1047,10 @@ async fn desktop_async_answer_dismisses_only_its_question_and_preserves_the_othe
             question("Same title?", /*options*/ None),
         ];
         chat.add_async_questions("questions", &questions);
-        chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+        chat.handle_key_event(KeyEvent::new(
+            KeyCode::Up,
+            KeyModifiers::CONTROL | KeyModifiers::ALT,
+        ));
         chat.bottom_pane
             .questions
             .as_mut()
@@ -1132,7 +1195,10 @@ async fn retried_question_answers_keep_separate_envelopes_and_order() {
         chat.on_task_started();
         chat.submit_user_message(UserMessage::from("before"));
         chat.add_async_questions("message", &questions());
-        chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+        chat.handle_key_event(KeyEvent::new(
+            KeyCode::Up,
+            KeyModifiers::CONTROL | KeyModifiers::ALT,
+        ));
         for answer in ["North", "Bring a map"] {
             chat.bottom_pane.handle_paste(answer.into());
             chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
