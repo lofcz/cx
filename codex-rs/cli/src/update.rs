@@ -24,8 +24,8 @@ use tempfile::TempDir;
 
 mod install;
 
-const RELEASE_REPOSITORY: &str = "yuguorui/codex";
-const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/yuguorui/codex/releases/latest";
+const RELEASE_REPOSITORY: &str = "lofcz/codex-plus";
+const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/lofcz/codex-plus/releases/latest";
 const METADATA_TIMEOUT: Duration = Duration::from_secs(30);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const MAX_CHECKSUM_MANIFEST_BYTES: u64 = 64 * 1024;
