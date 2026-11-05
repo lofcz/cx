@@ -43,8 +43,10 @@ fn quota(used_percent: i32) -> RateLimitSnapshot {
 async fn codext_quota_recovery_keeps_manual_pause_and_queued_message() {
     let (mut chat, _, _, mut ops) = make_chatwidget_manual_with_sender().await;
     chat.thread_id = Some(ThreadId::new());
+    set_chatgpt_auth(&mut chat);
     chat.on_rate_limit_error(RateLimitErrorKind::UsageLimit, "Usage exhausted".into());
     chat.on_rate_limit_snapshot(Some(quota(100)));
+    chat.finish_rate_limit_recovery();
     chat.submit_user_message(UserMessage::from("after reset"));
     assert!(chat.input_queue.quota_exhausted);
     assert_eq!(chat.input_queue.queued_user_messages.len(), 1);
@@ -62,6 +64,7 @@ async fn codext_quota_recovery_keeps_manual_pause_and_queued_message() {
 #[tokio::test]
 async fn codext_sparse_or_unrelated_quota_does_not_release_hold() {
     let (mut chat, _, _, _) = make_chatwidget_manual_with_sender().await;
+    set_chatgpt_auth(&mut chat);
     chat.on_rate_limit_error(RateLimitErrorKind::UsageLimit, "Usage exhausted".into());
     chat.on_rate_limit_snapshot(Some(quota(100)));
     let mut sparse = quota(0);
