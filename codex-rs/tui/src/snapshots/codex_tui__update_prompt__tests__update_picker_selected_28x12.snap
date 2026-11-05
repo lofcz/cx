@@ -1,13 +1,14 @@
 ---
 source: tui/src/update_prompt.rs
+assertion_line: 369
 expression: rendered
 ---
 
   Update available · 0.0.0
   → 9.9.9
   Release notes:
-  https://github.com/yuguo
-  rui/codex/releases/lates
+  https://github.com/lofcz
+  /codex-plus/releases/lat
 ↑
 › 3. Skip until next version
 

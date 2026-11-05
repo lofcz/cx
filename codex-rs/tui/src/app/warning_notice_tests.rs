@@ -62,29 +62,16 @@ async fn warning_notice_keeps_details_in_transcript_and_preserves_draft() -> Res
         )
     );
     let live = screen(&tui);
-    assert!(live.contains("⚠ 2 warnings"));
+    assert!(!live.contains("⚠ 2 warnings"));
     let shortcut = app
         .keymap
         .primary_hint(crate::keymap::KeymapContext::Global, "open_warnings")
         .unwrap()
         .display_label();
-    assert!(live.contains(&format!("{shortcut} to view")));
+    assert!(!live.contains(&format!("{shortcut} to view")));
     assert!(!live.contains("handshake failed"));
-    let buffer = crate::custom_terminal::test_support::last_rendered_buffer(&tui.terminal);
-    let position = buffer
-        .area
-        .positions()
-        .find(|position| buffer[*position].symbol() == "⚠")
-        .expect("warning badge");
-    assert!(app.chat_widget.handle_warning_event(
-        &TuiEvent::Mouse(crossterm::event::MouseEvent {
-            kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
-            column: position.x,
-            row: position.y,
-            modifiers: KeyModifiers::NONE,
-        }),
-        &app.transcript_cells
-    ));
+    app.chat_widget.open_warnings(&app.transcript_cells);
+    assert!(app.chat_widget.keymap_contexts().is_warnings());
     app.chat_widget.handle_key_event(KeyCode::Esc.into());
     app.open_transcript_overlay(&mut tui);
     app.render_owned_transcript(&mut tui, size)?;
