@@ -1,5 +1,6 @@
 ---
 source: tui/src/bottom_pane/async_questions/state_tests.rs
+assertion_line: 439
 expression: buffer_text(&buffer)
 ---
 
@@ -11,4 +12,4 @@ expression: buffer_text(&buffer)
     2. Other
 
   enter submit   ⌃] skip
-  ⇧→ main prompt
+  ⌃⌥↓ main prompt
