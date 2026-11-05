@@ -1,5 +1,6 @@
 ---
 source: tui/src/chatwidget/tests/questions_tests.rs
+assertion_line: 859
 expression: rendered
 ---
 • Working (0s • esc to interrupt)
@@ -10,4 +11,4 @@ expression: rendered
 
   A typed answer
 
-  enter submit   ⌃] skip   ⇧→ main prompt
+  enter submit   ⌃] skip   ⌃⌥↓ main prompt

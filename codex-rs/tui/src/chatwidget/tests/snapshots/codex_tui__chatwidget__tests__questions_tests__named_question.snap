@@ -1,5 +1,6 @@
 ---
 source: tui/src/chatwidget/tests/questions_tests.rs
+assertion_line: 448
 expression: "render_bottom_popup(&chat, 80)"
 ---
 • Queued follow-up inputs
@@ -13,4 +14,4 @@ expression: "render_bottom_popup(&chat, 80)"
        xxxxxxxxxxxxxxxx but do not deploy
     2. Other
 
-  enter submit   ⌃] skip   ⇧→ main prompt
+  enter submit   ⌃] skip   ⌃⌥↓ main prompt

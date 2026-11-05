@@ -37,7 +37,10 @@ async fn question_turn_end_escapes_command_drafts_before_submission() {
             chat.show_welcome_banner = false;
             handle_turn_started(&mut chat, "turn");
             questions(&mut chat, "question", "Which way?");
-            chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+            chat.handle_key_event(KeyEvent::new(
+                KeyCode::Up,
+                KeyModifiers::CONTROL | KeyModifiers::ALT,
+            ));
             chat.bottom_pane.handle_paste("answer".into());
             chat.bottom_pane
                 .set_composer_text(draft.into(), Vec::new(), Vec::new());
@@ -96,9 +99,15 @@ async fn question_turn_end_appends_open_drafts_in_order_once() {
     chat.bottom_pane.set_composer_cursor(/*cursor*/ 0);
     questions(&mut chat, "first", "Which style?");
     questions(&mut chat, "second", "What budget?");
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     chat.bottom_pane.handle_paste("  Over-ear  ".into());
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     chat.bottom_pane.handle_paste("Under 250".into());
     chat.handle_key_event(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL));
     chat.handle_key_event(KeyEvent::from(KeyCode::Char('e')));
@@ -124,7 +133,10 @@ async fn question_turn_end_appends_open_drafts_in_order_once() {
     assert_recovered_draft(&mut chat, recovered);
 
     questions(&mut chat, "large", "Which way?");
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     let large_answer = "long answer ".repeat(/*n*/ 200);
     chat.bottom_pane.handle_paste(large_answer.clone());
     handle_turn_completed(&mut chat, "ended-turn", /*duration_ms*/ None);
@@ -147,12 +159,18 @@ async fn question_turn_end_recovers_collapsed_drafts_on_completion_and_failure()
         chat.bottom_pane.set_disable_paste_burst(/*disabled*/ false);
         handle_turn_started(&mut chat, "turn");
         questions(&mut chat, "question", "Which way?");
-        chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+        chat.handle_key_event(KeyEvent::new(
+            KeyCode::Up,
+            KeyModifiers::CONTROL | KeyModifiers::ALT,
+        ));
         // Leave typing buffered, then collapse before completion.
         for ch in "answer".chars() {
             chat.handle_key_event(KeyEvent::from(KeyCode::Char(ch)));
         }
-        chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT));
+        chat.handle_key_event(KeyEvent::new(
+            KeyCode::Down,
+            KeyModifiers::CONTROL | KeyModifiers::ALT,
+        ));
         for ch in "main".chars() {
             chat.handle_key_event(KeyEvent::from(KeyCode::Char(ch)));
         }
@@ -223,9 +241,15 @@ async fn question_turn_end_recovers_after_interruption_restores_queued_input() {
         chat.bottom_pane
             .set_composer_text("main draft".into(), Vec::new(), Vec::new());
         questions(&mut chat, "question", "Which way?");
-        chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+        chat.handle_key_event(KeyEvent::new(
+            KeyCode::Up,
+            KeyModifiers::CONTROL | KeyModifiers::ALT,
+        ));
         chat.bottom_pane.handle_paste("answer".into());
-        chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT));
+        chat.handle_key_event(KeyEvent::new(
+            KeyCode::Down,
+            KeyModifiers::CONTROL | KeyModifiers::ALT,
+        ));
         let main_draft = match main_input {
             MainInput::HistoryAccept | MainInput::HistoryCancel => {
                 chat.bottom_pane.record_replayed_user_message_history(
@@ -303,10 +327,16 @@ async fn question_turn_end_keeps_multiline_question_and_answer_as_text() {
         "question",
         "First line\r\n\r\n\x1b[31mLast\r line?\x1b[0m\x07",
     );
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     chat.bottom_pane
         .handle_paste("  First answer line\n\nLast answer line  ".into());
-    chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Down,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
 
     handle_turn_completed(&mut chat, "turn", /*duration_ms*/ None);
     let recovered = "> First line\n>\n> Last line?\n\nFirst answer line\n\nLast answer line";

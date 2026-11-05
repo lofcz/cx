@@ -1870,12 +1870,12 @@ impl RuntimeKeymap {
                 interrupt_turn: default_bindings![plain(KeyCode::Esc)],
                 cancel_pending_steers: default_bindings![],
                 decrease_reasoning_effort: default_bindings![
-                    alt(KeyCode::Char(',')),
-                    alt(KeyCode::Down)
+                    alt(KeyCode::Down),
+                    alt(KeyCode::Char(','))
                 ],
                 increase_reasoning_effort: default_bindings![
-                    alt(KeyCode::Char('.')),
-                    alt(KeyCode::Up)
+                    alt(KeyCode::Up),
+                    alt(KeyCode::Char('.'))
                 ],
                 previous_permission_mode: default_bindings![],
                 next_permission_mode: default_bindings![],
@@ -3346,15 +3346,15 @@ mod tests {
         assert_eq!(
             runtime.chat.decrease_reasoning_effort,
             vec![
-                key_hint::alt(KeyCode::Char(',')),
                 key_hint::alt(KeyCode::Down),
+                key_hint::alt(KeyCode::Char(',')),
             ]
         );
         assert_eq!(
             runtime.chat.increase_reasoning_effort,
             vec![
-                key_hint::alt(KeyCode::Char('.')),
                 key_hint::alt(KeyCode::Up),
+                key_hint::alt(KeyCode::Char('.')),
             ]
         );
         assert_eq!(

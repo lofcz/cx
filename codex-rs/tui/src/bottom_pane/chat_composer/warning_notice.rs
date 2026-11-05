@@ -1,6 +1,6 @@
-//! Fit warning counts and the configured warnings shortcut into the existing passive hint row.
-//! Interactive hints retain priority. Shared status content wraps beside the warning.
-//! Only the count and warning label receive an amber accent; surrounding hints stay muted.
+//! Fit account usage or warning counts into the existing bottom hint row.
+//! Interactive hints retain priority; warning delivery never changes composer geometry.
+//! Account usage also stays visible while a running task has a queued draft.
 
 use super::*;
 use crate::line_truncation::truncate_line_with_ellipsis_if_overflow;
@@ -24,7 +24,9 @@ impl ChatComposer {
         (options.warning_count > 0 || options.usage_indicator.is_some())
             && !options.footer.is_some_and(|footer| footer.is_interactive)
             && matches!(self.popups.active, ActivePopup::None)
-            && self.footer_mode().shows_passive_line(self.is_task_running)
+            && (self.footer_mode().shows_passive_line(self.is_task_running)
+                || (options.usage_indicator.is_some()
+                    && self.footer_mode() == FooterMode::ComposerHasDraft))
             && self.footer.hint_override.is_none()
             && !self.footer.flash_visible()
             && self.history_search.is_none()

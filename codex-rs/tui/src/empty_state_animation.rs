@@ -237,7 +237,7 @@ impl EmptyStateAnimation {
             if let Some(delay) = self.render_in_at(stage, buffer, Presentation::Animated, now) {
                 return Some(delay);
             }
-            // The replay has faded back to the idle pose and no longer needs redraws.
+            // The replay has faded back to the continuous idle rotation.
             self.replaying = false;
         }
         if let Some(previous) = self.last_frame.replace(now) {
