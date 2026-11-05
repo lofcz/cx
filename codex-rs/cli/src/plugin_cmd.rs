@@ -50,7 +50,7 @@ const OPENAI_BUNDLED_ALPHA_MARKETPLACE_NAME: &str = "openai-bundled-alpha";
 const OPENAI_PRIMARY_RUNTIME_MARKETPLACE_NAME: &str = "openai-primary-runtime";
 
 #[derive(Debug, Parser)]
-#[command(bin_name = "cc plugin")]
+#[command(bin_name = "cx plugin")]
 pub struct PluginCli {
     #[clap(flatten)]
     pub config_overrides: CliConfigOverrides,
@@ -82,8 +82,8 @@ pub enum PluginSubcommand {
 
 #[derive(Debug, Parser)]
 #[command(
-    bin_name = "cc plugin add",
-    after_help = "Examples:\n  cc plugin add sample@debug\n  cc plugin add sample --marketplace debug"
+    bin_name = "cx plugin add",
+    after_help = "Examples:\n  cx plugin add sample@debug\n  cx plugin add sample --marketplace debug"
 )]
 pub struct AddPluginArgs {
     /// Plugin selector to install: either PLUGIN@MARKETPLACE or PLUGIN with --marketplace.
@@ -101,8 +101,8 @@ pub struct AddPluginArgs {
 
 #[derive(Debug, Parser)]
 #[command(
-    bin_name = "cc plugin list",
-    after_help = "Examples:\n  cc plugin list\n  cc plugin list --marketplace debug\n  cc plugin list --json\n  cc plugin list --available --json"
+    bin_name = "cx plugin list",
+    after_help = "Examples:\n  cx plugin list\n  cx plugin list --marketplace debug\n  cx plugin list --json\n  cx plugin list --available --json"
 )]
 pub struct ListPluginsArgs {
     /// Only list plugins from this marketplace name.
@@ -120,8 +120,8 @@ pub struct ListPluginsArgs {
 
 #[derive(Debug, Parser)]
 #[command(
-    bin_name = "cc plugin remove",
-    after_help = "Examples:\n  cc plugin remove sample@debug\n  cc plugin remove sample --marketplace debug"
+    bin_name = "cx plugin remove",
+    after_help = "Examples:\n  cx plugin remove sample@debug\n  cx plugin remove sample --marketplace debug"
 )]
 pub struct RemovePluginArgs {
     /// Plugin selector to remove: either PLUGIN@MARKETPLACE or PLUGIN with --marketplace.
