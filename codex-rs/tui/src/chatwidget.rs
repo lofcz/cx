@@ -354,7 +354,6 @@ mod rate_limits;
 mod usage_notice;
 use self::rate_limits::RateLimitErrorKind;
 use self::rate_limits::RateLimitSwitchPromptState;
-use self::rate_limits::RateLimitWarningState;
 use self::rate_limits::app_server_rate_limit_error_kind;
 pub(crate) use self::rate_limits::fallback_limit_label;
 use self::rate_limits::is_app_server_cyber_policy_error;
@@ -608,7 +607,6 @@ pub(crate) struct ChatWidget {
     plan_type: Option<PlanType>,
     codex_rate_limit_reached_type: Option<RateLimitReachedType>,
     codex_spend_control_reached: Option<bool>,
-    rate_limit_warnings: RateLimitWarningState,
     clock_format: crate::clock_format::ClockFormat,
     usage_notice_state: usage_notice::UsageNoticeState,
     backend_banner_state: backend_banners::BackendBannerState,

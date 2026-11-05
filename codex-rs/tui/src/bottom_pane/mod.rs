@@ -22,6 +22,8 @@
 //! below activity and previews, above the composer.
 pub(crate) use chat_composer::CommandPopupPlacement;
 pub(crate) use chat_composer::ComposerRenderOptions;
+pub(crate) use usage_indicator::UsageIndicator;
+mod usage_indicator;
 pub(crate) use chat_composer::TranscriptFooter;
 pub(crate) use composer_gap::ComposerGap;
 pub(crate) use footer::footer_hint_items_line;
@@ -2646,6 +2648,7 @@ impl BottomPane {
                 && options.image_previews.is_none()
                 && options.textarea_right_reserve == 0
                 && options.warning_count == 0
+                && options.usage_indicator.is_none()
                 && options.footer.is_none()
                 && !options.separate_status_line
                 && !options.is_dialog_backdrop

@@ -110,7 +110,7 @@ use codex_protocol::protocol::AskForApproval;
 use codex_protocol::user_input::UserInput;
 use codex_terminal_detection::TerminalName;
 
-/// Codex CLI
+/// CC coding agent
 ///
 /// If no subcommand is specified, options will be forwarded to the interactive CLI.
 #[derive(Debug, Parser)]
@@ -122,8 +122,9 @@ use codex_terminal_detection::TerminalName;
     // The executable is sometimes invoked via a platform‑specific name like
     // `codex-x86_64-unknown-linux-musl`, but the help output should always use
     // the generic `codex` command name that users run.
-    bin_name = "codex++",
-    override_usage = "codex++ [OPTIONS] [PROMPT]\n       codex++ [OPTIONS] <COMMAND> [ARGS]"
+    name = "cc",
+    bin_name = "cc",
+    override_usage = "cc [OPTIONS] [PROMPT]\n       cc [OPTIONS] <COMMAND> [ARGS]"
 )]
 struct MultitoolCli {
     #[clap(flatten)]
@@ -838,7 +839,7 @@ async fn run_update_command() -> anyhow::Result<()> {
     #[cfg(debug_assertions)]
     {
         anyhow::bail!(
-            "`codex++ update` is not available in debug builds. Install a release build of Codex to use this command."
+            "`cc update` is not available in debug builds. Install a release build of Codex to use this command."
         );
     }
 
