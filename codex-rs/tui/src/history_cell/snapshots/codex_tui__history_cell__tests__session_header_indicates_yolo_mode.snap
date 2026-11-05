@@ -4,6 +4,6 @@ assertion_line: 1885
 expression: rendered
 ---
 
-  >_ CC (vtest)
+  >_ CX (vtest)
      /tmp/project
   permissions: YOLO mode

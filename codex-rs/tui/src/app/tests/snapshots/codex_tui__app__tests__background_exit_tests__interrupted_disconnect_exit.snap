@@ -5,4 +5,4 @@ expression: output
 ---
 Disconnected from this task. The current turn was stopped.
 To reconnect, run:
-  cc resume THREAD_ID
+  cx resume THREAD_ID
