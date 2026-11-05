@@ -63,6 +63,8 @@ impl LocalSettings {
                 config.tui_alternate_screen != codex_config::types::AltScreenMode::Never,
             ),
             tui: Tui {
+                status_header: config.tui_status_header,
+                server_overloaded_resume: config.tui_server_overloaded_resume,
                 default_hosts: Default::default(),
                 notification_settings: config.tui_notifications.clone(),
                 animations: config.animations,
