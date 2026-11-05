@@ -69,7 +69,6 @@ impl ChatWidget {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::chatwidget::tests::make_chatwidget_manual_with_sender;
 
     #[tokio::test]
