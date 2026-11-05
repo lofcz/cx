@@ -54,10 +54,11 @@ Environment variables:
 ### Build from source
 
 ```shell
-cd codex-rs
-cargo build --release --bin codex
-# Binary appears at target/release/codex
-# Copy or symlink it as codex++ to match the fork release command name
+CODEX_REPO_ROOT="$PWD" python3 scripts/build_codex_package.py \
+  --target "$(rustc -vV | sed -n 's/^host: //p')" \
+  --entrypoint-stem codex++ --cargo-profile dev-small \
+  --package-dir /tmp/codex-plus-package
+/tmp/codex-plus-package/bin/codex++ --no-daemon
 ```
 
 ### Quick usage
@@ -157,11 +158,14 @@ consolidation_model = "provider/model-for-consolidation"
 
 See [`codex-rs/README.md`](./codex-rs/README.md) for full configuration reference including `extra_body`, `extra_headers`, `env_key_auth`, `request_max_retry_delay_ms`, and reasoning effort mapping.
 
-## Upstream Features
+## Upstream updates
 
-Forks should add features, not freeze you in time. Every day at 02:00 Asia/Shanghai, an automated workflow checks [openai/codex](https://github.com/openai/codex) for new commits and rebases Codex++ onto the latest `upstream/main`. The rebased fork must pass formatting checks, a workspace-wide Cargo check, and a release build before it is pushed and a new release is triggered.
+[yuguorui/codex-plus](https://github.com/yuguorui/codex-plus) follows upstream Codex through daily rebases.
+This fork pins its parent commit in `.codex-plus-base` and applies updates explicitly.
+The inherited automatic rebase is disabled here, so it cannot overwrite the Codext additions.
+See [Fork features](./docs/fork-features.md#update-from-codex) for the update procedure.
 
-That means you keep the latest upstream capabilities alongside the additions in Codex++. See the [upstream documentation](https://developers.openai.com/codex) for details on config, MCP, notifications, sandbox, exec, and more.
+See the [upstream documentation](https://developers.openai.com/codex) for configuration, MCP, notifications, sandboxing, and execution.
 
 ## Docs
 
