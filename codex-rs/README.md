@@ -6,20 +6,20 @@
 
 Codex++ is distributed independently from the upstream Codex CLI. It cannot be installed via `npm` (`@openai/codex`) or Homebrew (`brew install --cask codex`) - those install the official upstream version without Chat/Anthropic wire support. Use one of the methods below instead.
 
-### One-command install (recommended)
+### Install a published release
 
-Codex++ publishes pre-built binaries for macOS (Apple Silicon), Linux (x86_64), and Windows (x86_64) via a dedicated GitHub Actions release workflow. The installers below resolve the latest release, verify the SHA-256 checksum against `codex-package_SHA256SUMS`, extract the standalone package, and install the `codex++` command.
+The release workflow supports macOS (Apple Silicon), Linux (x86_64), and Windows (x86_64). These installers require a published release in this fork. The installers below resolve the latest release, verify the SHA-256 checksum against `codex-package_SHA256SUMS`, extract the standalone package, and install the `codex++` command.
 
 **macOS / Linux** (run in a terminal):
 
 ```shell
-curl -fsSL https://github.com/yuguorui/codex/releases/latest/download/install-fork.sh | sh
+curl -fsSL https://github.com/lofcz/codex-plus/releases/latest/download/install-fork.sh | sh
 ```
 
 **Windows** (run in PowerShell):
 
 ```powershell
-irm https://github.com/yuguorui/codex/releases/latest/download/install-fork.ps1 | iex
+irm https://github.com/lofcz/codex-plus/releases/latest/download/install-fork.ps1 | iex
 ```
 
 The standalone package is stored under `~/.codex/packages/standalone` (`%USERPROFILE%\.codex\packages\standalone` on Windows), and the `codex++` command is installed into `~/.local/bin` (`%USERPROFILE%\.local\bin` on Windows). Make sure that directory is on your `PATH`.
@@ -40,22 +40,24 @@ sh install-fork.sh rust-v202608271200
 
 Both installers honor these environment variables:
 
-- `CODEX_RELEASE_REPOSITORY` - GitHub `owner/repo` that publishes fork releases (default: `yuguorui/codex`).
+- `CODEX_RELEASE_REPOSITORY` - GitHub `owner/repo` that publishes fork releases (default: `lofcz/codex-plus`).
 - `CODEX_INSTALL_DIR` - directory that receives the `codex++` executable (default: `~/.local/bin`).
 - `CODEX_BIN_NAME` - installed command name (default: `codex++`).
 - `CODEX_HOME` - Codex home directory that holds the standalone package tree (default: `~/.codex`).
 
 #### Updating
 
-Run the same installer again, or run `codex update` from a release install. Codex++ also checks for a newer `rust-v<yyyymmddhhmm>` release on startup (refreshed every 20 hours) and shows a banner with an **Update now** option when one is available.
+Run the same installer again, or run `codex++ update` from a release install. Codex++ also checks for a newer `rust-v<yyyymmddhhmm>` release on startup (refreshed every 20 hours) and shows a banner with an **Update now** option when one is available.
 
 You can also build from source:
 
 ```shell
-cd codex-rs
-cargo build --release --bin codex
-# The binary appears at target/release/codex.
-# Copy or symlink it as codex++ if you want to match the fork release command name.
+# From the repository root:
+CODEX_REPO_ROOT="$PWD" python3 scripts/build_codex_package.py \
+  --target "$(rustc -vV | sed -n 's/^host: //p')" \
+  --entrypoint-stem codex++ --cargo-profile dev-small \
+  --package-dir /tmp/codex-plus-package
+/tmp/codex-plus-package/bin/codex++ --no-daemon
 ```
 
 ## What's New in Codex++
