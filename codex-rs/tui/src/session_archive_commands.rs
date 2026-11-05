@@ -1,4 +1,4 @@
-//! Shared implementation for `cc archive`, `cc delete`, and `cc unarchive`.
+//! Shared implementation for `cx archive`, `cx delete`, and `cx unarchive`.
 //!
 //! The CLI commands are thin app-server clients: resolve a user-provided UUID or exact session
 //! name, then call the corresponding app-server RPC.
