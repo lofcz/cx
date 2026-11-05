@@ -393,6 +393,7 @@ enum BackgroundEvent {
         result: std::io::Result<SessionTarget>,
     },
     Rename {
+        backend_id: BackendId,
         thread_id: ThreadId,
         name: String,
         result: std::io::Result<()>,
@@ -1079,7 +1080,7 @@ fn spawn_app_server_source(backend: AppServerPickerBackend) -> sources::Source {
                     });
                 }
                 PickerLoadRequest::Rename {
-                    backend_id: _,
+                    backend_id,
                     thread_id,
                     name,
                 } => {
@@ -1088,6 +1089,7 @@ fn spawn_app_server_source(backend: AppServerPickerBackend) -> sources::Source {
                         .await
                         .map_err(std::io::Error::other);
                     let _ = bg_tx.send(BackgroundEvent::Rename {
+                        backend_id,
                         thread_id,
                         name,
                         result,
@@ -2087,11 +2089,12 @@ impl PickerState {
                 return Ok(self.handle_unarchive_result(thread_id, result));
             }
             BackgroundEvent::Rename {
+                backend_id,
                 thread_id,
                 name,
                 result,
             } => {
-                self.handle_rename_result(thread_id, name, result);
+                self.handle_rename_result(backend_id, thread_id, name, result);
             }
         }
         Ok(None)
