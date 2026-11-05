@@ -1,11 +1,11 @@
-//! Deterministic surface projection and Braille rasterization of the Codex logo morph.
+//! Deterministic surface projection and Braille rasterization of the extruded CC mark.
 //!
 //! Fields and depth use Float32 sampling; all other math uses Float64.
 
 use std::f64::consts::TAU;
 
 use super::geometry::EXTENT;
-use super::geometry::FIELDS;
+use super::geometry::FIELD;
 use super::geometry::GRID;
 use super::geometry::STEP;
 use super::lighting::Lighting;
@@ -30,7 +30,6 @@ pub(super) struct Cell {
 }
 
 pub(super) struct Renderer {
-    shape: Vec<f32>,
     depth: Vec<f32>,
     colors: Vec<u32>,
     cells: Vec<Cell>,
@@ -40,7 +39,6 @@ impl Default for Renderer {
     fn default() -> Self {
         let samples = usize::from(MAX_COLUMNS) * usize::from(MAX_ROWS) * 8;
         Self {
-            shape: vec![0.0; GRID * GRID],
             depth: vec![f32::NEG_INFINITY; samples],
             colors: vec![0; samples],
             cells: vec![Cell::default(); samples / 8],
@@ -62,22 +60,16 @@ impl Renderer {
         let phase = phase.rem_euclid(/*rhs*/ 1.0);
         let second = if phase >= 0.5 { 1.0 } else { 0.0 };
         let spin = smooth((phase * 2.0 - second) / 0.82);
-        let morph = smooth((spin - 2.0 / 3.0) * 3.0);
         let rotation = (second + spin) * TAU;
-        let blend = if second == 1.0 { 1.0 - morph } else { morph };
         let (sx, cx) = (rotation.sin() * WOBBLE).sin_cos();
         let (sy, cy) = rotation.sin_cos();
         let (sz, cz) = ((phase * TAU).sin() * 0.045).sin_cos();
-        let bevel = 0.075 + blend * 0.012;
+        let bevel = 0.082;
         let dot_columns = columns * 2;
         let dot_rows = rows * 4;
         let dot_width = 800.0 / dot_columns as f64;
         let dot_height = 550.0 / dot_rows as f64;
         self.depth.fill(f32::NEG_INFINITY);
-        for (i, value) in self.shape.iter_mut().enumerate() {
-            *value =
-                (f64::from(FIELDS[0][i]) * (1.0 - blend) + f64::from(FIELDS[1][i]) * blend) as f32;
-        }
         let mut project = |[x, y, mut z]: [f64; 3], [mut nx, mut ny, mut nz]: [f64; 3]| {
             let u = x * 2.2 + y * 0.7;
             let v = y * 2.8 - x * 0.4;
@@ -119,14 +111,14 @@ impl Renderer {
         for row in 1..GRID - 1 {
             for column in 1..GRID - 1 {
                 let i = row * GRID + column;
-                let d = f64::from(self.shape[i]);
+                let d = f64::from(FIELD[i]);
                 if d < -STEP {
                     continue;
                 }
                 let x = column as f64 * STEP - EXTENT;
                 let y = row as f64 * STEP - EXTENT;
-                let dx = f64::from(self.shape[i + 1]) - f64::from(self.shape[i - 1]);
-                let dy = f64::from(self.shape[i + GRID]) - f64::from(self.shape[i - GRID]);
+                let dx = f64::from(FIELD[i + 1]) - f64::from(FIELD[i - 1]);
+                let dy = f64::from(FIELD[i + GRID]) - f64::from(FIELD[i - GRID]);
                 let length = dx.hypot(dy);
                 let length = if length == 0.0 { 1.0 } else { length };
                 let gx = dx / length;
