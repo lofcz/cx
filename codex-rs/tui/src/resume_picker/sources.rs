@@ -127,7 +127,7 @@ pub(super) fn spawn(
                                     PickerLoadRequest::Transcript { thread_id, .. } => BackgroundEvent::Transcript { backend_id: backend, thread_id, transcript: Err(error) },
                                     PickerLoadRequest::Archive { thread_id, .. } => BackgroundEvent::Archive { thread_id, result: Err(error) },
                                     PickerLoadRequest::Unarchive { thread_id, .. } => BackgroundEvent::Unarchive { thread_id, result: Err(error) },
-                                    PickerLoadRequest::Rename { thread_id, name, .. } => BackgroundEvent::Rename { thread_id, name, result: Err(error) },
+                                    PickerLoadRequest::Rename { thread_id, name, .. } => BackgroundEvent::Rename { backend_id: backend, thread_id, name, result: Err(error) },
                                     PickerLoadRequest::Page(_) => unreachable!(),
                                 };
                                 let _ = output.send(event);
