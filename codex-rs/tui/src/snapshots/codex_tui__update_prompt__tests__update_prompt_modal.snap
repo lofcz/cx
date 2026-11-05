@@ -7,7 +7,7 @@ expression: contents
   Update available · 0.0.0 → 9.9.9
   Release notes: https://github.com/lofcz/codex-plus/releases/latest
 
-› 1. Update now (runs `codex++ update`)
+› 1. Update now (runs `cc update`)
   2. Skip
   3. Skip until next version
 

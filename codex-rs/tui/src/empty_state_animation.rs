@@ -1,5 +1,5 @@
-//! The blossom welcome animation for onboarding, with a full-color final pose.
-//! Visible time pauses while hidden. Fresh conversations start settled and can replay on a click.
+//! The extruded CC welcome animation. Empty prompts show a subtle continuous rotation.
+//! Visible time pauses while hidden. Clicking the mark replays the brighter welcome sequence.
 
 mod geometry;
 mod lighting;
@@ -88,7 +88,7 @@ impl EmptyStateAnimation {
         self.pause_clock();
     }
 
-    /// Replay only on the drawn blossom; unrelated gestures keep their normal owner.
+    /// Replay only on the drawn CC mark; unrelated gestures keep their normal owner.
     pub(crate) fn handle_mouse(&mut self, mouse: MouseEvent) -> bool {
         let inside = self
             .stage
@@ -188,8 +188,8 @@ impl EmptyStateAnimation {
             .then_some(FRAME_INTERVAL)
     }
 
-    /// Draw only in space the caller has cleared and owns. The centered blossom returns
-    /// on clear, without restarting or scheduling animation.
+    /// Draw only in space the caller has cleared and owns. The centered CC mark resumes
+    /// rotation when the prompt is empty, and pauses while hidden or motion is reduced.
     pub(crate) fn render_first_screen(
         &mut self,
         screen: Rect,
@@ -197,6 +197,18 @@ impl EmptyStateAnimation {
         buffer: &mut Buffer,
         composer: Option<ComposerState>,
         motion: MotionMode,
+    ) -> Option<Duration> {
+        self.render_first_screen_at(screen, available, buffer, composer, motion, Instant::now())
+    }
+
+    fn render_first_screen_at(
+        &mut self,
+        screen: Rect,
+        available: Rect,
+        buffer: &mut Buffer,
+        composer: Option<ComposerState>,
+        motion: MotionMode,
+        now: Instant,
     ) -> Option<Duration> {
         const STAGE_ROWS: u16 = 21;
         const MIN_STAGE_ROWS: u16 = 14;
@@ -222,14 +234,18 @@ impl EmptyStateAnimation {
         }
         self.stage = Some(stage);
         if self.replaying {
-            if let Some(delay) = self.render_in(stage, buffer, Presentation::Animated) {
+            if let Some(delay) = self.render_in_at(stage, buffer, Presentation::Animated, now) {
                 return Some(delay);
             }
             // The replay has faded back to the idle pose and no longer needs redraws.
             self.replaying = false;
         }
-        self.paint_frame(stage, buffer, SETTLED_BLOSSOM, sequence::STATIC_OPACITY);
-        None
+        if let Some(previous) = self.last_frame.replace(now) {
+            self.spin_elapsed += now.saturating_duration_since(previous);
+        }
+        let phase = self.spin_elapsed.as_secs_f64() / sequence::LOOP_SECONDS;
+        self.paint_frame(stage, buffer, phase, sequence::STATIC_OPACITY);
+        Some(FRAME_INTERVAL)
     }
 
     fn paint_frame(&mut self, area: Rect, buffer: &mut Buffer, phase: f64, opacity: f32) {
