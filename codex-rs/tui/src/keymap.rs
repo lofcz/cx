@@ -1476,10 +1476,7 @@ impl RuntimeKeymap {
             (
                 keymap.chat.prompt_stack_back.as_ref(),
                 &mut chat.prompt_stack_back,
-                vec![
-                    ("alt-down", key_hint::alt(KeyCode::Down)),
-                    ("shift-right", key_hint::shift(KeyCode::Right)),
-                ],
+                vec![("ctrl-alt-down", key_hint::ctrl_alt(KeyCode::Down))],
             ),
             (
                 keymap.chat.skip_question.as_ref(),
@@ -1506,16 +1503,16 @@ impl RuntimeKeymap {
         // bindings on the same input path keep the keys, while explicit
         // reasoning bindings remain authoritative.
         if keymap.chat.decrease_reasoning_effort.is_none()
-            && configured_main_surface_alias_is_used(keymap, "shift-down")
+            && configured_main_surface_alias_is_used(keymap, "alt-down")
         {
             chat.decrease_reasoning_effort
-                .retain(|binding| *binding != key_hint::shift(KeyCode::Down));
+                .retain(|binding| *binding != key_hint::alt(KeyCode::Down));
         }
         if keymap.chat.increase_reasoning_effort.is_none()
-            && configured_main_surface_alias_is_used(keymap, "shift-up")
+            && configured_main_surface_alias_is_used(keymap, "alt-up")
         {
             chat.increase_reasoning_effort
-                .retain(|binding| *binding != key_hint::shift(KeyCode::Up));
+                .retain(|binding| *binding != key_hint::alt(KeyCode::Up));
         }
 
         let pager = PagerKeymap {
@@ -1874,16 +1871,16 @@ impl RuntimeKeymap {
                 cancel_pending_steers: default_bindings![],
                 decrease_reasoning_effort: default_bindings![
                     alt(KeyCode::Char(',')),
-                    shift(KeyCode::Down)
+                    alt(KeyCode::Down)
                 ],
                 increase_reasoning_effort: default_bindings![
                     alt(KeyCode::Char('.')),
-                    shift(KeyCode::Up)
+                    alt(KeyCode::Up)
                 ],
                 previous_permission_mode: default_bindings![],
                 next_permission_mode: default_bindings![],
-                edit_queued_message: default_bindings![shift(KeyCode::Left), alt(KeyCode::Up)],
-                prompt_stack_back: default_bindings![shift(KeyCode::Right), alt(KeyCode::Down)],
+                edit_queued_message: default_bindings![raw(key_hint::ctrl_alt(KeyCode::Up))],
+                prompt_stack_back: default_bindings![raw(key_hint::ctrl_alt(KeyCode::Down))],
                 skip_question: default_bindings![ctrl(KeyCode::Char(']'))],
             },
             composer: ComposerKeymap {
@@ -3350,19 +3347,19 @@ mod tests {
             runtime.chat.decrease_reasoning_effort,
             vec![
                 key_hint::alt(KeyCode::Char(',')),
-                key_hint::shift(KeyCode::Down),
+                key_hint::alt(KeyCode::Down),
             ]
         );
         assert_eq!(
             runtime.chat.increase_reasoning_effort,
             vec![
                 key_hint::alt(KeyCode::Char('.')),
-                key_hint::shift(KeyCode::Up),
+                key_hint::alt(KeyCode::Up),
             ]
         );
         assert_eq!(
             runtime.chat.edit_queued_message,
-            vec![key_hint::shift(KeyCode::Left), key_hint::alt(KeyCode::Up)]
+            vec![key_hint::ctrl_alt(KeyCode::Up)]
         );
         assert_eq!(
             runtime.composer.history_search_previous,
@@ -3435,15 +3432,15 @@ mod tests {
     #[test]
     fn configured_main_surface_bindings_prune_reasoning_fallback_aliases() {
         let mut keymap = TuiKeymap::default();
-        keymap.editor.move_up = Some(one("shift-up"));
-        keymap.vim_text_object.word = Some(one("shift-down"));
+        keymap.editor.move_up = Some(one("alt-up"));
+        keymap.vim_text_object.word = Some(one("alt-down"));
 
         let runtime = RuntimeKeymap::from_config(&keymap).expect("config should parse");
 
-        assert_eq!(runtime.editor.move_up, vec![key_hint::shift(KeyCode::Up)]);
+        assert_eq!(runtime.editor.move_up, vec![key_hint::alt(KeyCode::Up)]);
         assert_eq!(
             runtime.vim_text_object.word,
-            vec![key_hint::shift(KeyCode::Down)]
+            vec![key_hint::alt(KeyCode::Down)]
         );
         assert_eq!(
             runtime.chat.decrease_reasoning_effort,
@@ -4335,7 +4332,7 @@ mod tests {
     #[test]
     fn interrupt_turn_rejects_question_back_and_skip_bindings() {
         for (key, action) in [
-            ("alt-down", "chat.prompt_stack_back"),
+            ("ctrl-alt-down", "chat.prompt_stack_back"),
             ("ctrl-]", "chat.skip_question"),
             ("ctrl-5", "chat.skip_question"),
             ("ctrl-] x", "chat.skip_question"),
@@ -4343,7 +4340,7 @@ mod tests {
         ] {
             let mut keymap = TuiKeymap::default();
             keymap.chat.interrupt_turn = Some(one(key));
-            if key == "alt-down" {
+            if key == "ctrl-alt-down" {
                 keymap.chat.prompt_stack_back = Some(one(key));
             } else {
                 let runtime = RuntimeKeymap::from_config(&keymap).unwrap();

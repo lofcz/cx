@@ -275,7 +275,6 @@ impl ChatWidget {
         self.add_credits_nudge_email_in_flight = None;
         self.codex_rate_limit_reached_type = None;
         self.codex_spend_control_reached = None;
-        self.rate_limit_warnings = RateLimitWarningState::default();
         self.usage_notice_state = usage_notice::UsageNoticeState::default();
         self.rate_limit_switch_prompt = RateLimitSwitchPromptState::Idle;
         self.bottom_pane

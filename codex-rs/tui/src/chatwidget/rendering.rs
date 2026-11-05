@@ -319,7 +319,13 @@ impl ChatWidget {
             };
             options.rendered_selection = Some(&self.rendered_selection);
             options.image_previews = self.composer_images.as_ref();
-            options.warning_count = self.warning_display_state.count;
+            options.warning_count = 0;
+            options.usage_indicator = self.usage_notice_state.indicator(
+                self.clock_format,
+                self.input_queue.quota_exhausted
+                    || self.codex_rate_limit_reached_type.is_some()
+                    || self.codex_spend_control_reached == Some(true),
+            );
             options.textarea_right_reserve = right_reserve;
             options.separate_status_line = options.command_popup_placement
                 != crate::bottom_pane::CommandPopupPlacement::AboveComposer;
