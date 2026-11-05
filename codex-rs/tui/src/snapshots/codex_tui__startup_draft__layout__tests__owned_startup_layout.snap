@@ -5,7 +5,7 @@ expression: "format!(\"cursor={:?}\\n{frame}\",\nlayout.cursor_pos(area)).replac
 ---
 cursor=Some((13, 12))
                                                 
-  >_ CC (v<VERSION>)                                
+  >_ CX (v<VERSION>)                                
      loading                                    
                                                 
                                                 

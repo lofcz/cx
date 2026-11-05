@@ -1,4 +1,4 @@
-//! The extruded CC welcome animation. Empty prompts show a subtle continuous rotation.
+//! The extruded CX welcome animation. Empty prompts show a subtle continuous rotation.
 //! Visible time pauses while hidden. Clicking the mark replays the brighter welcome sequence.
 
 mod geometry;
@@ -88,7 +88,7 @@ impl EmptyStateAnimation {
         self.pause_clock();
     }
 
-    /// Replay only on the drawn CC mark; unrelated gestures keep their normal owner.
+    /// Replay only on the drawn CX mark; unrelated gestures keep their normal owner.
     pub(crate) fn handle_mouse(&mut self, mouse: MouseEvent) -> bool {
         let inside = self
             .stage
@@ -188,7 +188,7 @@ impl EmptyStateAnimation {
             .then_some(FRAME_INTERVAL)
     }
 
-    /// Draw only in space the caller has cleared and owns. The centered CC mark resumes
+    /// Draw only in space the caller has cleared and owns. The centered CX mark resumes
     /// rotation when the prompt is empty, and pauses while hidden or motion is reduced.
     pub(crate) fn render_first_screen(
         &mut self,

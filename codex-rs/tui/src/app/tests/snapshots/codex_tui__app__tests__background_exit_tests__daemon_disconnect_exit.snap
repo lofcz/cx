@@ -5,6 +5,6 @@ expression: output
 ---
 Disconnected from this task. Any running work continues.
 To reconnect, run:
-  cc resume THREAD_ID
-Stop the current turn: run cc agents, select this task, and press f10.
+  cx resume THREAD_ID
+Stop the current turn: run cx agents, select this task, and press f10.
 Token usage so far: total=12 input=10 output=2
