@@ -72,9 +72,9 @@ const RESTART_RETRY_INTERVAL: Duration = Duration::from_millis(50);
 const INSTALLER_STDERR_TAIL_BYTES: usize = 2 * 1024;
 const INSTALLER_STDERR_DRAIN_TIMEOUT: Duration = Duration::from_secs(1);
 const RELEASE_REPOSITORY_ENV: &str = "CODEX_RELEASE_REPOSITORY";
-const DEFAULT_RELEASE_REPOSITORY: &str = "yuguorui/codex-plus";
+const DEFAULT_RELEASE_REPOSITORY: &str = "lofcz/codex-plus";
 const INSTALL_URL: &str =
-    "https://github.com/yuguorui/codex-plus/releases/latest/download/install-fork.sh";
+    "https://github.com/lofcz/codex-plus/releases/latest/download/install-fork.sh";
 
 pub(crate) async fn run(
     http_client_factory: HttpClientFactory,

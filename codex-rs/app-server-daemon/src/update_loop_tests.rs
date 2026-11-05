@@ -34,7 +34,7 @@ fn install_url_uses_default_and_honors_repository_override() {
         INSTALL_URL
     );
     assert_eq!(
-        super::install_url_from_override(Some("yuguorui/codex-plus")),
+        super::install_url_from_override(Some("lofcz/codex-plus")),
         INSTALL_URL
     );
     assert_eq!(
