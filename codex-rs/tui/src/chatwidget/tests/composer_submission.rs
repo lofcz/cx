@@ -2327,7 +2327,7 @@ async fn restore_thread_input_state_applies_running_state_policy() {
 
     chat.pause_for_disconnect();
     chat.handle_restricted_key(
-        KeyEvent::new(KeyCode::Up, KeyModifiers::ALT),
+        KeyEvent::new(KeyCode::Up, KeyModifiers::CONTROL | KeyModifiers::ALT),
         RestrictedInputMode::Disconnected,
     );
     assert!(!chat.has_queued_follow_up_messages());
@@ -2335,7 +2335,7 @@ async fn restore_thread_input_state_applies_running_state_policy() {
     assert_eq!(chat.input_queue.pending_steers.len(), 1);
     assert!(chat.input_queue.suppress_queue_autosend);
     chat.handle_restricted_key(
-        KeyEvent::new(KeyCode::Up, KeyModifiers::ALT),
+        KeyEvent::new(KeyCode::Up, KeyModifiers::CONTROL | KeyModifiers::ALT),
         RestrictedInputMode::Disconnected,
     );
     assert_eq!(

@@ -49,6 +49,10 @@ just test \
     (package(codex-core) & test(code_mode_handler_accepts_custom_and_function_payloads)) |
     (package(codex-core) & test(multi_agent_config_precedence_overrides_remote_model_selector)) |
     (package(codex-core) & test(claude_file_tools_require_read_track_edits_and_reject_external_changes)) |
+    (package(codex-tui) & test(cc_)) |
+    (package(codex-tui) & test(keymap)) |
+    (package(codex-tui) & test(empty_state_animation)) |
+    (package(codex-tui) & test(usage_notice)) |
     (package(codex-tui) & test(codext_)) |
     (package(codex-tui) & test(resume_picker)) |
     (package(codex-tui) & test(rate_limit_recovery)) |

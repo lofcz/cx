@@ -1,8 +1,9 @@
 ---
 source: tui/src/chatwidget/tests/status_and_layout.rs
+assertion_line: 1844
 expression: popup
 ---
-  Approaching rate limits
+  Usage limit reached
   Switch to gpt-6-luna for lower credit usage?
 
 

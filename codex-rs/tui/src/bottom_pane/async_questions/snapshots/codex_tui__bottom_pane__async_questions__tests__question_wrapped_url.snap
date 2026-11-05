@@ -13,4 +13,4 @@ expression: "crate::terminal_hyperlinks::strip_osc8(&buffer_text(&buffer))"
     2. Other
 
   enter submit   ⌃] skip
-  ⇧→ prev question
+  ⌃⌥↓ prev question

@@ -1,5 +1,6 @@
 ---
 source: tui/src/bottom_pane/async_questions/state_tests.rs
+assertion_line: 325
 expression: buffer_text(&buffer)
 ---
 
@@ -12,4 +13,4 @@ expression: buffer_text(&buffer)
        rows
 
   f9 submit   ⌃] skip   option 1/13
-  ⇧→ prev question
+  ⌃⌥↓ prev question

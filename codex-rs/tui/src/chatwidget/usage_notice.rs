@@ -1,6 +1,5 @@
 //! Account quota state projects to the persistent bottom usage indicator.
 //! Rolling updates retain metadata; fresh account reads replace windows and confirm recovery.
-//! Sparse updates preserve quota metadata and account reads confirm recovery.
 
 use super::ChatWidget;
 use super::rate_limits::RateLimitSnapshotSource;

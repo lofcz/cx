@@ -1,5 +1,6 @@
 ---
 source: tui/src/chatwidget/tests/questions_tests.rs
+assertion_line: 1040
 expression: "render_bottom_popup(&chat, 80)"
 ---
 • Queued follow-up inputs
@@ -8,4 +9,4 @@ expression: "render_bottom_popup(&chat, 80)"
 
   My draft for the second question
 
-  enter submit   ⌃] skip   ⇧→ main prompt
+  enter submit   ⌃] skip   ⌃⌥↓ main prompt
