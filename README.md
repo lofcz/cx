@@ -1,4 +1,4 @@
-<p align="center"><strong>Codex++</strong> is the Codex fork for bringing your own models, orchestrating serious multi-agent workflows, and, most importantly, coding with a Bongo Cat that types when you do. It rebases onto upstream every day, so the extras do not come at the cost of falling behind.</p>
+<p align="center"><strong>Codex++</strong> is the Codex fork for bringing your own models, orchestrating serious multi-agent workflows, and, most importantly, coding with a Bongo Cat that types when you do. This fork adds selected Codext features to yuguorui/codex-plus.</p>
 
 <p align="center">
   <img src="./.github/codex-cli-splash.png" alt="Codex++ CLI with a Bongo Cat terminal pet" width="80%" />
@@ -13,7 +13,7 @@
 Codex++ extends the official [Codex CLI](https://github.com/openai/codex) with:
 
 - **Bongo Cat, obviously** - our most powerful (and cutest) feature. Pick it from `/pets` and it will drum along while you type. Image-capable terminals get the full sprite animation; everyone else gets a terminal-native ASCII cat.
-- **A fork that keeps up** - automation rebases Codex++ onto the latest upstream Codex every day, validates the result, and publishes fresh binaries when upstream changes. You should not have to choose between fork features and current upstream features.
+- **Upstream updates** - yuguorui/codex-plus follows upstream Codex daily. This fork preserves its additions through explicit, tested updates.
 - **Dynamic multi-agent workflows** - run deterministic JavaScript orchestration in the background with parallel agents, structured outputs, worktree isolation, retries, resumable runs, and live progress in `/workflows`.
 - **Universal provider support** - connect Codex++ to any provider through either native wire protocol:
   - **Chat Completions API** (`wire_api = "chat"`) - works with OpenAI-compatible providers including Ollama, vLLM, LiteLLM, DeepSeek, Mistral, Groq, Together, DashScope, and more.
@@ -28,16 +28,20 @@ Codex++ extends the official [Codex CLI](https://github.com/openai/codex) with:
 
 For a detailed technical breakdown, see [`codex-rs/README.md`](./codex-rs/README.md).
 
+## Local fork additions
+
+See [fork features and maintenance](docs/fork-features.md) for draft copying, session renaming, status information, and recovery controls.
+
 ## Quickstart
 
 ### One-command install (recommended)
 
 ```shell
-curl -fsSL https://github.com/yuguorui/codex/releases/latest/download/install-fork.sh | sh
+curl -fsSL https://github.com/lofcz/codex-plus/releases/latest/download/install-fork.sh | sh
 ```
 
 ```powershell
-irm https://github.com/yuguorui/codex/releases/latest/download/install-fork.ps1 | iex
+irm https://github.com/lofcz/codex-plus/releases/latest/download/install-fork.ps1 | iex
 ```
 
 The install script resolves the latest release, verifies SHA-256 checksums, stores the standalone package under `~/.codex/packages/standalone`, and installs the `codex++` command into `~/.local/bin`.
