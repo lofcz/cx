@@ -1,6 +1,6 @@
 ---
 source: tui/src/bottom_pane/async_questions/state_tests.rs
-assertion_line: 220
+assertion_line: 228
 expression: "rendered[0]"
 ---
 
@@ -15,5 +15,5 @@ expression: "rendered[0]"
 
   Type your answer
 
-  enter submit   ⌃] skip   ⇧→ main prompt
-  ⇧← next question
+  enter submit   ⌃] skip   ⌃⌥↓ main prompt
+  ⌃⌥↑ next question
