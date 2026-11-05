@@ -874,6 +874,14 @@ impl QuickDial {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Tui {
+    /// Show a compact model, directory, Git, and quota header above the composer.
+    #[serde(default)]
+    pub status_header: bool,
+
+    /// Resume overloaded turns with bounded exponential backoff.
+    #[serde(default)]
+    pub server_overloaded_resume: bool,
+
     /// Preferred hosts for new conversations, indexed by project and local user identity.
     /// Read from the user configuration only; values are never endpoints or credentials.
     #[serde(default)]

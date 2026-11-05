@@ -296,6 +296,7 @@ impl ChatWidget {
     /// warnings once, synchronizes shared cached state (such as git-branch
     /// lookup), then renders each surface from that shared snapshot.
     pub(crate) fn refresh_status_surfaces(&mut self) {
+        self.sync_status_header_git_status_poller();
         self.bottom_pane
             .set_luna_reserve_active(self.current_model() == LUNA_RESERVE_MODEL);
         let selections = self.status_surface_selections();
@@ -502,7 +503,7 @@ impl ChatWidget {
             })
     }
 
-    fn status_line_cwd(&self) -> &Path {
+    pub(super) fn status_line_cwd(&self) -> &Path {
         self.current_cwd
             .as_deref()
             .unwrap_or(self.config.cwd.as_path())

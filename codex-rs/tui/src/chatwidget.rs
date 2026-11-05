@@ -395,7 +395,9 @@ mod windows_sandbox_prompts;
 use self::status_state::StatusIndicatorState;
 use self::status_state::StatusState;
 use self::status_state::TerminalTitleStatusKind;
+mod overload_recovery;
 mod status_controls;
+mod status_header;
 mod status_surface_commands;
 mod status_surfaces;
 use self::status_surface_commands::StatusSurfaceOverrides;
@@ -785,6 +787,10 @@ pub(crate) struct ChatWidget {
     // Cached project-root display name keyed by cwd for status/title rendering.
     status_line_project_root_name_cache: Option<CachedProjectRootName>,
     // Cached git branch name for the status line (None if unknown).
+    status_header_git_status: Option<crate::git_status::GitStatusSummary>,
+    status_header_git_status_cwd: Option<PathBuf>,
+    status_header_git_status_task: Option<tokio::task::JoinHandle<()>>,
+    overload_recovery: overload_recovery::OverloadRecovery,
     status_line_branch: Option<String>,
     // CWD used to resolve the cached branch; change resets branch state.
     status_line_branch_cwd: Option<PathBuf>,
@@ -2196,6 +2202,7 @@ impl Drop for ChatWidget {
         }
         self.reset_realtime_conversation();
         self.stop_rate_limit_poller();
+        self.stop_status_header_git_status_poller();
     }
 }
 
