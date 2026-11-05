@@ -1,19 +1,20 @@
-//! Account quota state and composer notice, independent of one-time warning history.
+//! Account quota state projects to the persistent bottom usage indicator.
 //! Rolling updates retain metadata; fresh account reads replace windows and confirm recovery.
-//! Details target half the composer gap; the shortest notice may use its full width.
+//! Sparse updates preserve quota metadata and account reads confirm recovery.
 
 use super::ChatWidget;
 use super::rate_limits::RateLimitSnapshotSource;
 use super::rate_limits::is_approximate_window;
-use super::rate_limits::limit_label_for_window;
 use crate::clock_format::ClockFormat;
-use crate::footer_hint::first_fitting_line;
+#[cfg(test)]
 use chrono::DateTime;
+#[cfg(test)]
 use chrono::Local;
 use codex_app_server_protocol::CreditsSnapshot;
 use codex_app_server_protocol::RateLimitSnapshot;
 use codex_app_server_protocol::RateLimitWindow;
 use codex_protocol::account::PlanType;
+#[cfg(test)]
 use ratatui::text::Line;
 
 #[derive(Default)]
@@ -28,60 +29,39 @@ pub(super) struct UsageNoticeState {
 }
 
 impl UsageNoticeState {
+    pub(super) fn indicator(
+        &self,
+        clock_format: ClockFormat,
+        limit_reached: bool,
+    ) -> Option<crate::bottom_pane::UsageIndicator> {
+        let window = [self.secondary.as_ref(), self.primary.as_ref()]
+            .into_iter()
+            .flatten()
+            .max_by_key(|window| window.used_percent);
+        let unlimited = self
+            .credits
+            .as_ref()
+            .is_some_and(|credits| credits.unlimited);
+        if window.is_none() && !unlimited && !limit_reached {
+            return None;
+        }
+        Some(crate::bottom_pane::UsageIndicator {
+            used_percent: window.map_or(0, |window| window.used_percent),
+            resets_at: window.and_then(|window| window.resets_at),
+            unlimited,
+            limit_reached,
+            clock_format,
+        })
+    }
+
+    #[cfg(test)]
     fn line(
         &self,
         width: u16,
         now: DateTime<Local>,
         clock_format: ClockFormat,
     ) -> Option<Line<'static>> {
-        let (window, is_secondary) = self.current()?;
-        let label = limit_label_for_window(window.window_duration_mins, is_secondary);
-        // Percentages are rounded by the protocol; 100% alone does not prove a hard stop.
-        let remaining = if window.used_percent >= 100 {
-            "<1%".to_string()
-        } else {
-            format!("{}%", 100 - window.used_percent)
-        };
-        let emphasis = if window.used_percent >= 95 {
-            "only "
-        } else {
-            ""
-        };
-        let summary = format!("⚠ {label} limit: {emphasis}{remaining} left");
-        let reset = window
-            .resets_at
-            .and_then(|timestamp| DateTime::from_timestamp(timestamp, /*nsecs*/ 0))
-            .filter(|reset| *reset > now)
-            .map(|reset| {
-                format!(
-                    " · resets at {}",
-                    crate::status::format_reset_timestamp(
-                        reset.with_timezone(&Local),
-                        now,
-                        clock_format
-                    )
-                )
-            })
-            .unwrap_or_default();
-        let mut style = crate::style::warning_notice_style();
-        if window.used_percent >= 90 {
-            style = style.bold();
-        }
-        let compact = Line::from(format!("⚠ {label} {remaining} left"));
-        // Prefer half the row, but keep a complete warning on narrow terminals.
-        let notice_width = (usize::from(width) / 2)
-            .max(compact.width())
-            .min(usize::from(width)) as u16;
-        let line = first_fitting_line(
-            [
-                Line::from(format!("{summary}{reset} · /status")),
-                Line::from(format!("{summary} · /status")),
-                Line::from(summary),
-                compact,
-            ],
-            notice_width,
-        );
-        (!line.spans.is_empty()).then_some(line.style(style))
+        self.indicator(clock_format, false)?.line(width, now)
     }
 
     pub(super) fn update(
@@ -93,7 +73,7 @@ impl UsageNoticeState {
         if matches!(source, RateLimitSnapshotSource::AccountUsage) && self.applying_stale_read {
             return false;
         }
-        let previous = self.current();
+        let previous = self.indicator(ClockFormat::TwentyFourHour, false);
         let rolling = matches!(source, RateLimitSnapshotSource::RollingUpdate);
         if rolling {
             self.stale_through = Some(self.latest_read_id);
@@ -126,10 +106,11 @@ impl UsageNoticeState {
         if !rolling || snapshot.credits.is_some() {
             self.credits = snapshot.credits.clone();
         }
-        self.current() != previous
+        self.indicator(ClockFormat::TwentyFourHour, false) != previous
     }
 
     /// Select the lowest remaining capacity and whether it is the secondary window.
+    #[cfg(test)]
     pub(super) fn current(&self) -> Option<(RateLimitWindow, bool)> {
         if self
             .credits
@@ -164,15 +145,16 @@ pub(super) fn warning_threshold(plan_type: Option<PlanType>, window_minutes: Opt
 }
 
 impl ChatWidget {
+    #[cfg(test)]
     pub(crate) fn usage_notice(&self, width: u16) -> Option<Line<'static>> {
-        if self.has_applicable_backend_banner()
-            || self.codex_rate_limit_reached_type.is_some()
-            || self.codex_spend_control_reached == Some(true)
-        {
-            return None;
-        }
         self.usage_notice_state
-            .line(width, Local::now(), self.clock_format)
+            .indicator(
+                self.clock_format,
+                self.input_queue.quota_exhausted
+                    || self.codex_rate_limit_reached_type.is_some()
+                    || self.codex_spend_control_reached == Some(true),
+            )?
+            .line(width, Local::now())
     }
 
     pub(crate) fn start_usage_notice_read(&mut self, request_id: u64) {

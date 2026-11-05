@@ -1,4 +1,4 @@
-//! Hit testing and editable mouse selections share the textarea's rendered wrap and scroll state.
+//! Mouse and Shift+Arrow selections share rendered rows, atomic boundaries, and editing behavior.
 
 use super::*;
 use crate::text_selection::SelectionUnit;
@@ -19,6 +19,53 @@ pub(super) struct MouseSelection {
 }
 
 impl TextArea {
+    pub(super) fn select_with_shift(&mut self, event: KeyEvent) -> bool {
+        if event.modifiers != KeyModifiers::SHIFT
+            || !matches!(event.kind, KeyEventKind::Press | KeyEventKind::Repeat)
+            || !matches!(
+                event.code,
+                KeyCode::Up
+                    | KeyCode::Down
+                    | KeyCode::Left
+                    | KeyCode::Right
+                    | KeyCode::Home
+                    | KeyCode::End
+            )
+        {
+            return false;
+        }
+        let anchor = self
+            .mouse_selection_range()
+            .map_or(self.cursor_pos, |range| {
+                if self.cursor_pos <= range.start {
+                    range.end
+                } else {
+                    range.start
+                }
+            });
+        match event.code {
+            KeyCode::Up => self.move_cursor_up(),
+            KeyCode::Down => self.move_cursor_down(),
+            KeyCode::Left => self.move_cursor_left(),
+            KeyCode::Right => self.move_cursor_right(),
+            KeyCode::Home => self.set_cursor(self.beginning_of_current_line()),
+            KeyCode::End => self.set_cursor(self.end_of_current_line()),
+            _ => unreachable!("selection keys are checked above"),
+        }
+        self.last_click = None;
+        self.clear_vim_replace_recovery();
+        self.vim_pending = VimPending::None;
+        self.mouse_selection = Some(MouseSelection {
+            pending_copy: None,
+            primary_owner: None,
+            origin: anchor..anchor,
+            unit: SelectionUnit::Character,
+            dragging: false,
+            moved: false,
+        });
+        true
+    }
+
     pub(in crate::bottom_pane) fn defer_copy(&mut self, id: u64) {
         if let Some(range) = self.mouse_selection_range()
             && let Some(selection) = &mut self.mouse_selection

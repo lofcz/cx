@@ -84,49 +84,34 @@ fn notice_shows_only_valid_future_reset_times() {
         (Some(i64::MAX), ""),
         (
             Some((now + chrono::Duration::days(/*days*/ 1)).timestamp()),
-            " · resets at 12:00 on 21 Sep",
+            " · resets 12:00 on 21 Sep",
         ),
     ] {
         state.primary.as_mut().unwrap().resets_at = reset;
         assert_eq!(
             state.line(/*width*/ 160, now, ClockFormat::TwentyFourHour),
-            Some(
-                Line::from(format!("⚠ 5h limit: 8% left{expected} · /status"))
-                    .style(crate::style::warning_notice_style().bold())
-            ),
+            Some(Line::from(format!("Usage 8% left{expected}")).cyan()),
         );
     }
 }
 
 #[test]
-fn notice_emphasis_tracks_utilization_without_claiming_a_hard_stop() {
-    for (used, remaining, bold) in [
-        (89, "11%", false),
-        (90, "10%", true),
-        (94, "6%", true),
-        (95, "only 5%", true),
-        (100, "only <1%", true),
-        (101, "only <1%", true),
-    ] {
+fn cc_usage_percentage_stays_neutral_until_server_reports_a_limit() {
+    for (used, remaining) in [(1, 99), (50, 50), (95, 5), (100, 0), (101, 0)] {
         let state = UsageNoticeState {
             primary: snapshot(used).primary,
             ..Default::default()
         };
-        let style = crate::style::warning_notice_style();
         assert_eq!(
-            state.line(
-                /*width*/ 80,
-                notice_time(),
-                ClockFormat::TwentyFourHour
-            ),
-            Some(
-                Line::from(format!("⚠ 5h limit: {remaining} left · /status")).style(if bold {
-                    style.bold()
-                } else {
-                    style
-                })
-            ),
+            state.line(80, notice_time(), ClockFormat::TwentyFourHour),
+            Some(Line::from(format!("Usage {remaining}% left")).cyan())
         );
+        let hit = state
+            .indicator(ClockFormat::TwentyFourHour, true)
+            .unwrap()
+            .line(80, notice_time())
+            .unwrap();
+        assert!(hit.to_string().contains("Usage limit reached"));
     }
 }
 
@@ -304,7 +289,12 @@ async fn notice_redraws_when_only_limit_blockers_change() {
         blocked.spend_control_reached = spend_control_reached;
         blocked.rate_limit_reached_type = rate_limit_reached_type;
         chat.on_rolling_rate_limit_snapshot(blocked);
-        assert_eq!(chat.usage_notice(/*width*/ 80), None);
+        assert!(
+            chat.usage_notice(80)
+                .unwrap()
+                .to_string()
+                .contains("Usage limit reached")
+        );
         assert!(draw_rx.try_recv().is_ok());
         while draw_rx.try_recv().is_ok() {}
         chat.on_rate_limit_snapshot(/*snapshot*/ None);

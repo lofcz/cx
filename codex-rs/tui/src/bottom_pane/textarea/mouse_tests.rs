@@ -8,6 +8,60 @@ use crossterm::event::MouseEventKind::Up;
 use pretty_assertions::assert_eq;
 use ratatui::style::Modifier;
 
+#[test]
+fn cc_shift_rows_keep_the_anchor_and_replace_the_selected_text() {
+    let mut textarea = TextArea::new();
+    textarea.insert_str("alpha\nβeta\nlast");
+    textarea.input(KeyEvent::new(KeyCode::Up, KeyModifiers::SHIFT));
+    assert_eq!(
+        &textarea.text()[textarea.mouse_selection_range().unwrap()],
+        "\nlast"
+    );
+    textarea.input(KeyEvent::new(KeyCode::Up, KeyModifiers::SHIFT));
+    assert_eq!(
+        &textarea.text()[textarea.mouse_selection_range().unwrap()],
+        "a\nβeta\nlast"
+    );
+    textarea.input(KeyEvent::new(KeyCode::Down, KeyModifiers::SHIFT));
+    assert_eq!(
+        &textarea.text()[textarea.mouse_selection_range().unwrap()],
+        "\nlast"
+    );
+    textarea.input(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+    assert_eq!(textarea.text(), "alpha\nβetax");
+    assert!(textarea.mouse_selection_range().is_none());
+}
+
+#[test]
+fn cc_shift_selection_follows_wrapped_rows_and_keeps_elements_atomic() {
+    let mut textarea = TextArea::new();
+    textarea.insert_str("abcdefghijklmnop");
+    render(
+        &textarea,
+        Rect::new(0, 0, 6, 5),
+        &mut TextAreaState::default(),
+    );
+    textarea.input(KeyEvent::new(KeyCode::Up, KeyModifiers::SHIFT));
+    assert_eq!(
+        &textarea.text()[textarea.mouse_selection_range().unwrap()],
+        "klmnop"
+    );
+
+    textarea.set_text_clearing_elements("ab".into());
+    textarea.set_cursor(2);
+    textarea.insert_element("[Image #1]");
+    textarea.insert_str("cd");
+    for _ in 0..3 {
+        textarea.input(KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT));
+    }
+    assert_eq!(
+        &textarea.text()[textarea.mouse_selection_range().unwrap()],
+        "[Image #1]cd"
+    );
+    textarea.input(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+    assert_eq!(textarea.text(), "ab");
+}
+
 fn render(t: &TextArea, area: Rect, state: &mut TextAreaState) -> Buffer {
     let mut buffer = Buffer::empty(area);
     StatefulWidgetRef::render_ref(&t, area, &mut buffer, state);
