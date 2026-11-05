@@ -34,7 +34,7 @@ See [fork features and maintenance](docs/fork-features.md) for draft copying, se
 
 ## Quickstart
 
-### One-command install (recommended)
+### Install a published release
 
 ```shell
 curl -fsSL https://github.com/lofcz/codex-plus/releases/latest/download/install-fork.sh | sh
