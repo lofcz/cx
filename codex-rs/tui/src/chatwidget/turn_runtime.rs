@@ -507,7 +507,7 @@ impl ChatWidget {
         // on_error can drain queued input, before the asynchronous recovery read completes.
         self.input_queue.rate_limit_recovery_pending = self.has_chatgpt_account;
         let usage_limit_error = matches!(error_kind, RateLimitErrorKind::UsageLimit);
-        if usage_limit_error {
+        if usage_limit_error && self.has_chatgpt_account && self.requires_openai_auth {
             self.input_queue.quota_exhausted = true;
             self.bottom_pane.set_queue_submissions(true);
         }
