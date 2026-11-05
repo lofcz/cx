@@ -180,7 +180,7 @@ fn workflow_status_colors_match_semantics() {
             Some(Color::Red),
             None,
             None,
-            Some(Color::Yellow),
+            Some(Color::Magenta),
         ]
     );
 }
