@@ -540,7 +540,7 @@ async fn working_tip_stays_put_through_mouse_selection() -> Result<()> {
         .on_rate_limit_snapshot(Some(serde_json::from_value(serde_json::json!({
             "primary": {"usedPercent": 92, "windowDurationMins": 300},
         }))?));
-    assert!(app.composer_hint(size.width).is_some());
+    assert!(app.composer_hint(size.width).is_none());
     app.render_owned_transcript(&mut tui, size)?;
     app.handle_owned_transcript_event(
         &mut tui,
@@ -554,16 +554,16 @@ async fn working_tip_stays_put_through_mouse_selection() -> Result<()> {
     )?;
     assert!(app.composer_hint(size.width).is_none());
     app.render_owned_transcript(&mut tui, size)?;
-    assert!(
-        !buffer_text(crate::custom_terminal::test_support::last_rendered_buffer(
-            &tui.terminal,
-        ))
-        .contains("└ Tip:")
-    );
+    let screen = buffer_text(crate::custom_terminal::test_support::last_rendered_buffer(
+        &tui.terminal,
+    ));
+    assert!(screen.contains("└ Tip:"), "{screen}");
+    assert!(screen.contains("Usage 8% left"), "{screen}");
     {
         let mut selection = app.chat_widget.rendered_selection.borrow_mut();
         let crate::rendered_selection::RenderedSelection { view, cells, .. } = &mut *selection;
-        assert_eq!(view.selected_text(cells), None);
+        // The footer update does not remove the tip or invalidate its selection.
+        assert_eq!(view.selected_text(cells), Some("/help".into()));
     }
     server.shutdown().await?;
     tui.set_owned_screen(/*owned*/ false)?;
