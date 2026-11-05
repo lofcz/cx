@@ -1,27 +1,23 @@
-<p align="center"><strong>Codex++</strong> is the Codex fork for bringing your own models, orchestrating serious multi-agent workflows, and, most importantly, coding with a Bongo Cat that types when you do. This fork adds selected Codext features to yuguorui/codex-plus.</p>
+<p align="center"><strong>CC</strong> is a Codex fork with custom providers, agent workflows, prompt selection, and a compact usage footer. It extends yuguorui/codex-plus with selected Codext features.</p>
 
-<p align="center">
-  <img src="./.github/codex-cli-splash.png" alt="Codex++ CLI with a Bongo Cat terminal pet" width="80%" />
-</p>
-
-<p align="center">Codex++ runs locally on your computer as the <code>codex++</code> command. It builds as a standalone executable with zero dependencies.</p>
+<p align="center">Run <code>cc</code> in your interactive shell. The local launcher shares your existing Codex configuration and sessions.</p>
 
 ---
 
-## What is Codex++?
+## What is CC?
 
-Codex++ extends the official [Codex CLI](https://github.com/openai/codex) with:
+CC extends the official [Codex CLI](https://github.com/openai/codex) with:
 
 - **Bongo Cat, obviously** - our most powerful (and cutest) feature. Pick it from `/pets` and it will drum along while you type. Image-capable terminals get the full sprite animation; everyone else gets a terminal-native ASCII cat.
 - **Upstream updates** - yuguorui/codex-plus follows upstream Codex daily. This fork preserves its additions through explicit, tested updates.
 - **Dynamic multi-agent workflows** - run deterministic JavaScript orchestration in the background with parallel agents, structured outputs, worktree isolation, retries, resumable runs, and live progress in `/workflows`.
-- **Universal provider support** - connect Codex++ to any provider through either native wire protocol:
+- **Universal provider support** - connect CC to any provider through either native wire protocol:
   - **Chat Completions API** (`wire_api = "chat"`) - works with OpenAI-compatible providers including Ollama, vLLM, LiteLLM, DeepSeek, Mistral, Groq, Together, DashScope, and more.
   - **Anthropic Messages API** (`wire_api = "anthropic"`) - use Claude models directly through Anthropic's native API.
   - **Auth header scheme control** (`env_key_auth`) - choose between `Bearer` and `x-api-key` auth per provider.
   - **Provider-specific request fields** (`extra_body`) - merge arbitrary JSON into request bodies for provider-specific features like `enable_thinking` or `thinking_budget`.
   - **Non-GPT-friendly file tools** - offer hashline editing and Claude Code-compatible structured `Read` / `Edit` interfaces, giving models that struggle with Codex's freeform `apply_patch` grammar more reliable alternatives.
-- **More control** - make Codex++ adapt to your setup, not the other way around:
+- **More control** - make CC adapt to your setup, not the other way around:
   - **Multi-agent v2 opt-out** (`features.multi_agent_v2 = false`) - honor an explicit local disable even when the model catalog selects v2, so third-party providers are not forced onto its Responses API-specific namespaced and encrypted-schema tool protocol.
   - **Always retry** - automatically apply exponential backoff for any reasonable retry condition.
 - **Third-party memory compatibility** - use the active thread model for memory extraction and consolidation on non-OpenAI providers instead of sending provider-incompatible OpenAI model names.
@@ -30,11 +26,16 @@ For a detailed technical breakdown, see [`codex-rs/README.md`](./codex-rs/README
 
 ## Local fork additions
 
-See [fork features and maintenance](docs/fork-features.md) for draft copying, session renaming, status information, and recovery controls.
+See [fork features and maintenance](docs/fork-features.md) for prompt selection, reasoning shortcuts, session renaming, the usage footer, and recovery controls.
 
 ## Quickstart
 
-### Install a published release
+### Use the local installation
+
+Run `cc` in Fish. See [Local launcher](docs/fork-features.md#local-launcher) for installation details.
+The private launcher preserves the system C compiler used by builds.
+
+### Install a published package
 
 ```shell
 curl -fsSL https://github.com/lofcz/codex-plus/releases/latest/download/install-fork.sh | sh
@@ -63,18 +64,20 @@ CODEX_REPO_ROOT="$PWD" python3 scripts/build_codex_package.py \
 
 ### Quick usage
 
+With the local launcher installed:
+
 ```shell
 # Use with a Chat Completions provider
-codex++ -m ollama/qwen3
-codex++ -m deepseek/deepseek-chat
-codex++ -m dashscope/qwen-plus
+cc -m ollama/qwen3
+cc -m deepseek/deepseek-chat
+cc -m dashscope/qwen-plus
 
 # Use with Anthropic
-codex++ -m anthropic/claude-sonnet-4-20250514
+cc -m anthropic/claude-sonnet-4-20250514
 
 # Use with reasoning effort control
-codex++ -m deepseek/deepseek-chat --reasoning-effort low
-codex++ -m anthropic/claude-sonnet-4-20250514 --reasoning-effort high
+cc -m deepseek/deepseek-chat --reasoning-effort low
+cc -m anthropic/claude-sonnet-4-20250514 --reasoning-effort high
 ```
 
 ## Typing-reactive Bongo Cat
@@ -90,7 +93,7 @@ Run the deep-research workflow on the current state of local-first AI coding too
 Run a high-effort code-review workflow on the current branch.
 ```
 
-Codex++ includes `deep-research` and `code-review` workflows. It also discovers saved `.js` workflows from active plugins, `$CODEX_HOME/workflows`, and personal Claude workflows: `CLAUDE_CONFIG_DIR/workflows` when `CLAUDE_CONFIG_DIR` is set, otherwise `~/.claude/workflows`. Project discovery checks `.codex/workflows` and `.claude/workflows` at every directory from the current working directory up to the filesystem root. Saved workflows override bundled and plugin workflows. Project workflows take priority over personal ones; within the same directory, `.codex/workflows` wins over `.claude/workflows`; and the closest project directory to the current working directory wins. Only `.js` files are accepted. Workflow scripts can compose `agent()`, `pipeline()`, and `parallel()` calls, validate structured results with JSON Schema, and isolate mutating agents in temporary Git worktrees.
+CC includes `deep-research` and `code-review` workflows. It also discovers saved `.js` workflows from active plugins, `$CODEX_HOME/workflows`, and personal Claude workflows: `CLAUDE_CONFIG_DIR/workflows` when `CLAUDE_CONFIG_DIR` is set, otherwise `~/.claude/workflows`. Project discovery checks `.codex/workflows` and `.claude/workflows` at every directory from the current working directory up to the filesystem root. Saved workflows override bundled and plugin workflows. Project workflows take priority over personal ones; within the same directory, `.codex/workflows` wins over `.claude/workflows`; and the closest project directory to the current working directory wins. Only `.js` files are accepted. Workflow scripts can compose `agent()`, `pipeline()`, and `parallel()` calls, validate structured results with JSON Schema, and isolate mutating agents in temporary Git worktrees.
 
 Runs continue in the background after launch. Open `/workflows` in the TUI to inspect phases and agents, stop a run, or skip and retry individual agents. For command-line use and quick validation:
 
