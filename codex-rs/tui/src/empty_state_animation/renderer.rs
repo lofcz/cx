@@ -1,4 +1,4 @@
-//! Deterministic surface projection and Braille rasterization of the extruded CC mark.
+//! Deterministic surface projection and Braille rasterization of the extruded CX mark.
 //!
 //! Fields and depth use Float32 sampling; all other math uses Float64.
 
