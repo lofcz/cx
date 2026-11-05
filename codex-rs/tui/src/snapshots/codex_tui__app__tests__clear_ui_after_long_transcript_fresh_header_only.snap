@@ -4,5 +4,5 @@ assertion_line: 5874
 expression: rendered
 ---
 
-  >_ CC (v<VERSION>)
+  >_ CX (v<VERSION>)
      /tmp/project
