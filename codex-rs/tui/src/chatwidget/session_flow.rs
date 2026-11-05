@@ -126,6 +126,7 @@ impl ChatWidget {
         }
         let has_turn_history =
             previous_thread_id == self.thread_id && self.turn_lifecycle.has_turn_history;
+        self.reset_overload_recovery();
         self.turn_lifecycle.reset_thread();
         self.turn_lifecycle.has_turn_history = has_turn_history;
         self.safety_recourse = None;
@@ -353,6 +354,7 @@ impl ChatWidget {
         self.current_rollout_path = rollout_path;
         self.clear_background_terminals();
         self.input_queue.clear();
+        self.reset_overload_recovery();
         self.reset_realtime_conversation();
         // Finish any output not yet drained from the old runtime without live completion actions.
         self.on_task_complete(

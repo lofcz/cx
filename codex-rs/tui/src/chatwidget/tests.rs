@@ -234,6 +234,7 @@ mod approval_requests;
 mod backend_banners_tests;
 #[path = "tests/bedrock_catalog_tests.rs"]
 mod bedrock_catalog_tests;
+mod codext;
 #[path = "tests/collaboration_catalog_tests.rs"]
 mod collaboration_catalog_tests;
 #[path = "tests/compaction_tests.rs"]

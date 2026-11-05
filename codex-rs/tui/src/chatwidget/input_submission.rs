@@ -156,6 +156,9 @@ impl ChatWidget {
         source: UserMessageSource,
         prepared_images: Option<Vec<UserInput>>,
     ) -> (bool, Option<AppCommand>) {
+        if self.overload_recovery.pending() {
+            self.reset_overload_recovery();
+        }
         self.bottom_pane.dismiss_composer_sparkle();
         if self.has_misalignment_policy_violation() {
             return (false, None);
@@ -164,6 +167,7 @@ impl ChatWidget {
         self.input_queue.failed_before_send = false;
         self.empty_state_animation.borrow_mut().dismiss();
         if self.input_queue.rate_limit_recovery_pending
+            || self.input_queue.quota_exhausted
             || self.pending_image_submission.is_some()
             || self.safety_recourse.is_some()
         {
