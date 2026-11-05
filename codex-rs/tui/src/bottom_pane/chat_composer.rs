@@ -1,3 +1,5 @@
+//! Shift+Arrow extends the editable selection across visual rows. Alt+Up/Down changes reasoning.
+//! Account usage stays in the bottom hint row and never adds a row above the draft.
 //! The chat composer is the bottom-pane text input state machine.
 //! Rich registers retain original payloads across draft clears and composer replacement;
 //! only the live register transfers, not undo or repeat history. Copies receive fresh IDs and labels
@@ -4903,7 +4905,9 @@ impl ChatComposer {
                 }
             }
         }
-        self.footer.warning_notice_area.set(warning_area);
+        self.footer
+            .warning_notice_area
+            .set(warning_area.filter(|_| options.usage_indicator.is_none()));
         if let Some((warning_area, line)) = warning_notice {
             line.render(warning_area, buf);
         }

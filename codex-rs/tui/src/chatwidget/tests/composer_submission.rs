@@ -2392,10 +2392,10 @@ async fn restore_thread_input_state_applies_running_state_policy() {
 
 #[tokio::test]
 async fn default_shortcuts_edit_most_recent_queued_message() {
-    for key in [
-        KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT),
-        KeyEvent::new(KeyCode::Up, KeyModifiers::ALT),
-    ] {
+    for key in [KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    )] {
         let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
         chat.bottom_pane.set_task_running(/*running*/ true);
         for message in ["first queued", "second queued"] {

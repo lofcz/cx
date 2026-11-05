@@ -16,6 +16,8 @@
 //! breaks, interior separators hang off the preceding row without changing the editable text.
 //! Visible web URLs carry their complete terminal hyperlink destination across wrapped rows;
 //! masked rendering never exposes hyperlink destinations.
+//! Shift+Arrow and mouse selection use the same editable range, copy, and replacement paths.
+//! Keyboard selection follows visual rows and keeps its anchor when direction changes.
 //! Mouse selection and wheel browsing use those same visual rows and keep graphemes and elements
 //! atomic. Wheel browsing leaves the caret in place; moving or editing returns to caret following.
 //! The editing module resolves replacement targets shared by insertion and paste-context inspection.
@@ -656,6 +658,9 @@ impl TextArea {
             return;
         }
         self.last_click = None;
+        if self.select_with_shift(event) {
+            return;
+        }
         if self.vim_enabled {
             if self.is_vim_normal_mode() {
                 self.mouse_selection = None;
@@ -668,6 +673,9 @@ impl TextArea {
     }
 
     pub fn input_with_keymap(&mut self, event: KeyEvent, keymap: &EditorKeymap) {
+        if self.select_with_shift(event) {
+            return;
+        }
         self.last_click = None;
         self.end_mouse_drag();
         if keymap.insert_newline.is_pressed(event) {
