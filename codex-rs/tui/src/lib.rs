@@ -137,6 +137,7 @@ pub(crate) mod custom_terminal;
 mod daybreak;
 mod device_login;
 mod experimental_features;
+mod git_status;
 mod image_decode;
 mod markdown_copy;
 mod permission_discovery;

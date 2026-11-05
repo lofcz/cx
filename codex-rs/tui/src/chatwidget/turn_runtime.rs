@@ -147,6 +147,9 @@ impl ChatWidget {
             self.on_agent_reasoning_final();
         }
         self.input_queue.submit_pending_steers_after_interrupt = false;
+        if !from_replay {
+            self.reset_overload_recovery();
+        }
         let sanitized_last_agent_message = last_agent_message.as_deref().map(|message| {
             parse_assistant_markdown(message, self.config.cwd.as_path()).visible_markdown
         });
@@ -397,6 +400,7 @@ impl ChatWidget {
 
     pub(super) fn on_server_overloaded_error(&mut self, message: String) {
         self.input_queue.submit_pending_steers_after_interrupt = false;
+        self.schedule_overload_recovery();
         self.finalize_turn();
 
         let message = if message.trim().is_empty() {
@@ -411,6 +415,7 @@ impl ChatWidget {
     }
 
     fn on_error(&mut self, message: String) {
+        self.reset_overload_recovery();
         self.input_queue.submit_pending_steers_after_interrupt = false;
         self.finalize_turn();
         self.add_to_history(history_cell::new_error_event(message));
@@ -508,6 +513,10 @@ impl ChatWidget {
         // on_error can drain queued input, before the asynchronous recovery read completes.
         self.input_queue.rate_limit_recovery_pending = self.has_chatgpt_account;
         let usage_limit_error = matches!(error_kind, RateLimitErrorKind::UsageLimit);
+        if usage_limit_error {
+            self.input_queue.quota_exhausted = true;
+            self.bottom_pane.set_queue_submissions(true);
+        }
         let rate_limit_reached_type = self.codex_rate_limit_reached_type.map(|kind| {
             if usage_limit_error {
                 match kind {
@@ -603,6 +612,11 @@ impl ChatWidget {
             .as_ref()
             .and_then(app_server_rate_limit_error_kind)
         {
+            if from_replay {
+                self.finalize_turn();
+                self.add_to_history(history_cell::new_error_event(message));
+                return;
+            }
             match info {
                 RateLimitErrorKind::ServerOverloaded => self.on_server_overloaded_error(message),
                 RateLimitErrorKind::UsageLimit | RateLimitErrorKind::Generic => {
