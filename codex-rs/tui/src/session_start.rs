@@ -156,7 +156,7 @@ fn archived_session_guidance(err: &color_eyre::Report) -> Option<String> {
     let message = message
         .split_once(" (code ")
         .map_or(message, |(message, _)| message);
-    Some(message.to_string())
+    Some(message.replace("codex++ unarchive ", "cc unarchive "))
 }
 
 #[cfg(test)]
