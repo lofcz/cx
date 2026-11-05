@@ -29,6 +29,7 @@ enum Kind {
     Ide,
     Context,
     Warning,
+    Usage,
 }
 
 use Kind::*;
@@ -147,9 +148,11 @@ impl Hints {
             (Shortcuts, None),
             (Plan, Some(1)),
             (Warning, Some(1)),
+            (Usage, Some(1)),
             (Ide, Some(1)),
             (Action, Some(1)),
             (Warning, Some(2)),
+            (Usage, Some(2)),
             (Agents, None),
         ] {
             if p[kind.row(two)].width() <= width {
@@ -180,7 +183,7 @@ impl Hints {
             }
         }
         for kind in [
-            Action, Side, Shell, Vim, Plan, Interrupt, Goal, Ide, Warning, Context, SideNav,
+            Usage, Action, Side, Shell, Vim, Plan, Interrupt, Goal, Ide, Warning, Context, SideNav,
             AgentName, Agents, Shortcuts,
         ] {
             if !overflow[kind.row(two)] {
@@ -366,7 +369,13 @@ impl ChatComposer {
             );
         }
         if show_warning {
-            hints.add(Warning, self.warning_labels(options.warning_count));
+            if let Some(usage) = options.usage_indicator {
+                // CX shows persistent account usage instead of warning counts. Usage outranks
+                // every other passive hint so narrow terminals still report the quota.
+                hints.add(Usage, usage.labels(chrono::Local::now()));
+            } else {
+                hints.add(Warning, self.warning_labels(options.warning_count));
+            }
         }
         Some(hints)
     }
