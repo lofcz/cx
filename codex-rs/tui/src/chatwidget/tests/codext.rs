@@ -1,6 +1,19 @@
 use super::*;
 
 #[tokio::test]
+async fn cc_shift_up_edits_selection_without_changing_reasoning() {
+    let (mut chat, _, _, _) = make_chatwidget_manual_with_sender().await;
+    chat.thread_id = Some(ThreadId::new());
+    chat.bottom_pane
+        .set_composer_text("first\nsecond".into(), Vec::new(), Vec::new());
+    let effort = chat.effective_reasoning_effort();
+    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::SHIFT));
+    assert_eq!(chat.effective_reasoning_effort(), effort);
+    chat.handle_key_event(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+    assert_eq!(chat.bottom_pane.composer_text_with_pending(), "first");
+}
+
+#[tokio::test]
 async fn codext_copy_draft_preserves_text_and_does_not_interrupt() {
     let (mut chat, _, _, mut ops) = make_chatwidget_manual_with_sender().await;
     let key = KeyEvent::new(
