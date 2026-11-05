@@ -1,11 +1,11 @@
-# CC features
+# CX features
 
-CC extends [Codex++](https://github.com/yuguorui/codex-plus).
+CX extends [Codex++](https://github.com/yuguorui/codex-plus).
 It adapts selected features from [Codext](https://github.com/Loongphy/codext), commit `42c669b2472488f2fcd88361b15f2fac3463beb4`.
 Both projects use the Apache-2.0 license. Their existing license and notices remain in this repository.
 
 - Press **Ctrl+Shift+C** to copy the composer draft, including pending pasted text. The shortcut keeps the draft intact.
-  Empty drafts do not interrupt work. Terminals that intercept the shortcut must pass it through to CC.
+  Empty drafts do not interrupt work. Terminals that intercept the shortcut must pass it through to CX.
 - Press **Ctrl+R** in the session picker to rename the selected session. Press **Enter** to save or **Esc** to cancel.
   Archived sessions remain read-only. Existing list key bindings take precedence.
 - Press **Shift+Up/Down** to select prompt rows. **Shift+Left/Right/Home/End** also extends the selection.
@@ -16,7 +16,7 @@ Both projects use the Apache-2.0 license. Their existing license and notices rem
 - The bottom bar shows remaining account usage and its reset time.
   Advance usage warnings and model-switch prompts stay hidden until an actual usage limit occurs.
   The launcher disables the extra header above the prompt.
-- The startup title displays **CC**. A dotted, rotating 3D CC mark appears while the prompt is empty.
+- The startup title displays **CX**. A dotted, rotating 3D CX mark appears while the prompt is empty.
   Typing pauses the animation. The reduced-motion setting also pauses it.
 - Enable `tui.server_overloaded_resume` to resume overloaded turns after 15, 30, 60, 120, and 240 seconds.
   Recovery sends a queued follow-up first, or `Continue` when the queue is empty.
@@ -32,22 +32,21 @@ Codex++ workflow orchestration and provider support remain available.
 
 ## Local launcher
 
-`scripts/install/cc-local.sh` launches the separately installed local package.
+`scripts/install/cx-local.sh` launches the separately installed local package.
 It uses an embedded server for local sessions.
 An explicit `--remote` connection keeps its requested server.
 The launcher uses existing Codex configuration, authentication, and history.
 
-Install the launcher as `${XDG_DATA_HOME:-$HOME/.local/share}/codex-plus/bin/cc`.
-Place the package entrypoint link at `${XDG_DATA_HOME:-$HOME/.local/share}/codex-plus/bin/cc-binary`.
+Install the launcher as `~/.local/bin/cx`, with `~/.local/bin` on your PATH.
+Place the package entrypoint link at `${XDG_DATA_HOME:-$HOME/.local/share}/codex-plus/bin/cx-binary`.
 The package retains its internal `bin/codex++` entrypoint for updater compatibility.
 The launcher directs binary updates to this separate installation directory.
 Source builds do not require a published GitHub release.
 
-For Fish, install `scripts/install/cc.fish` as `~/.config/fish/functions/cc.fish`.
-Then run `cc` from an interactive shell.
-The function keeps the system C compiler available as `cc` in scripts and builds.
-Do not place the launcher named `cc` on the executable search path.
-Other shells can use an interactive alias for the private launcher path.
+The command works in interactive shells and scripts.
+It leaves the system C compiler, `cc`, available to builds.
+When upgrading from CC, remove the previous `~/.config/fish/functions/cc.fish` function.
+Run `functions --erase cc` in existing Fish sessions to unload the previous function.
 
 ## Validate changes
 
@@ -81,4 +80,4 @@ git commit -m 'chore: update Codex++ base'
 Resolve conflicts and run the fork checks before merging the update branch.
 The inherited automatic rebase runs only in the parent repository.
 This fork does not require the parent's model API secrets.
-Release installers and `cc update` use `lofcz/codex-plus` releases.
+Release installers and `cx update` use `lofcz/codex-plus` releases.
