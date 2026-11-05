@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
+from dataclasses import replace
 from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -14,6 +16,35 @@ from codex_package.targets import TARGET_SPECS
 
 
 class SourceBinariesForTargetTest(unittest.TestCase):
+    def test_renamed_package_uses_cargo_binary_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            entrypoint = touch_file(root / "codex")
+            helper = touch_file(root / "helper")
+            variant = replace(PACKAGE_VARIANTS["codex"], executable_stem="codex++")
+            with (
+                mock.patch("codex_package.cargo.subprocess.run"),
+                mock.patch(
+                    "codex_package.cargo.resolve_codex_v8_cargo_env", return_value={}
+                ),
+                mock.patch(
+                    "codex_package.cargo.cargo_profile_output_dir", return_value=root
+                ),
+            ):
+                outputs = build_source_binaries(
+                    TARGET_SPECS["x86_64-unknown-linux-gnu"],
+                    variant,
+                    cargo="cargo",
+                    profile="dev-small",
+                    entrypoint_bin=None,
+                    code_mode_host_bin=helper,
+                    exec_server_bin=helper,
+                    bwrap_bin=helper,
+                    codex_command_runner_bin=None,
+                    codex_windows_sandbox_setup_bin=None,
+                )
+            self.assertEqual(outputs.entrypoint_bin, entrypoint)
+
     def test_macos_package_with_prebuilt_entrypoint_builds_nothing(self) -> None:
         self.assertEqual(
             source_binaries_for_target(
