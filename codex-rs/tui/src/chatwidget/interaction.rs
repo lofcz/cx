@@ -12,6 +12,7 @@ use crate::clipboard_copy::worker::CopyResult;
 pub(crate) enum KeyEventAction {
     None,
     CopyLastResponse(Arc<str>),
+    CopyComposerDraft(Arc<str>),
     PasteImage {
         text_fallback: Option<KeyCode>,
         context: ClipboardPasteContext,
@@ -248,6 +249,19 @@ impl ChatWidget {
         }
 
         match key_event {
+            KeyEvent {
+                code: KeyCode::Char(c),
+                modifiers,
+                kind: KeyEventKind::Press,
+                ..
+            } if modifiers == KeyModifiers::CONTROL.union(KeyModifiers::SHIFT)
+                && c.eq_ignore_ascii_case(&'c') =>
+            {
+                if let Some(draft) = self.on_ctrl_shift_c() {
+                    return KeyEventAction::CopyComposerDraft(draft);
+                }
+                return KeyEventAction::None;
+            }
             KeyEvent {
                 code: KeyCode::Char(c),
                 modifiers,
@@ -736,6 +750,24 @@ impl ChatWidget {
         }
     }
 
+    /// Returns the composer draft to copy to the system clipboard when it contains text.
+    ///
+    /// Returns `None` when the copy path does not apply. The actual copy runs on the app clipboard worker via
+    /// [`KeyEventAction::CopyComposerDraft`].
+    fn on_ctrl_shift_c(&mut self) -> Option<Arc<str>> {
+        if !self.bottom_pane.no_modal_or_popup_active() {
+            return None;
+        }
+
+        let draft = self.bottom_pane.composer_text_with_pending();
+        if draft.trim().is_empty() {
+            return None;
+        }
+
+        self.request_redraw();
+        Some(draft.into())
+    }
+
     /// Handles a Ctrl+C press at the chat-widget layer.
     ///
     /// The first press arms a time-bounded quit shortcut and shows a footer hint via the bottom
@@ -745,6 +777,7 @@ impl ChatWidget {
     /// When the double-press quit shortcut is enabled, pressing the same shortcut again before
     /// expiry requests a shutdown-first quit.
     pub(super) fn on_ctrl_c(&mut self) {
+        self.reset_overload_recovery();
         let key = key_hint::ctrl(KeyCode::Char('c'));
         let modal_or_popup_active = !self.bottom_pane.no_modal_or_popup_active();
         let should_pause_active_goal = self

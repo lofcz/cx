@@ -5684,6 +5684,11 @@
           "description": "Records the one-time screen-reader detection attempt. Either value skips detection.",
           "type": "boolean"
         },
+        "server_overloaded_resume": {
+          "default": false,
+          "description": "Resume overloaded turns with bounded exponential backoff.",
+          "type": "boolean"
+        },
         "session_picker_view": {
           "allOf": [
             {
@@ -5710,6 +5715,11 @@
           "maximum": 99.0,
           "minimum": 1.0,
           "type": "integer"
+        },
+        "status_header": {
+          "default": false,
+          "description": "Show a compact model, directory, Git, and quota header above the composer.",
+          "type": "boolean"
         },
         "status_line": {
           "default": null,

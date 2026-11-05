@@ -268,6 +268,10 @@ impl ChatWidget {
         self.luna_reserve_notice_account_id = None;
         self.automatic_model_switch_state = backend_banners::AutomaticModelSwitchState::default();
         self.input_queue.rate_limit_recovery_pending = false;
+        self.input_queue.quota_exhausted = false;
+        self.bottom_pane
+            .set_queue_submissions(!self.is_session_configured());
+        self.reset_overload_recovery();
         self.add_credits_nudge_email_in_flight = None;
         self.codex_rate_limit_reached_type = None;
         self.codex_spend_control_reached = None;
@@ -314,6 +318,10 @@ impl ChatWidget {
     /// Set the model in the widget's config copy and stored collaboration mode.
     pub(crate) fn set_model(&mut self, model: &str) {
         if model != self.current_model() {
+            self.input_queue.quota_exhausted = false;
+            self.bottom_pane
+                .set_queue_submissions(!self.is_session_configured());
+            self.reset_overload_recovery();
             if self.current_model() == crate::model_catalog::LUNA_RESERVE_MODEL {
                 self.clear_reserve_return();
             } else {
@@ -607,6 +615,12 @@ impl ChatWidget {
     }
 
     pub(crate) fn set_effective_collaboration_mode(&mut self, mode: CollaborationMode) {
+        if mode.model() != self.current_model() {
+            self.input_queue.quota_exhausted = false;
+            self.bottom_pane
+                .set_queue_submissions(!self.is_session_configured());
+            self.reset_overload_recovery();
+        }
         let mode_kind = mode.mode;
         let settings = mode.settings;
         if mode_kind == ModeKind::Default {

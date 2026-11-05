@@ -124,6 +124,7 @@ impl ChatWidget {
             self.review.recent_auto_review_denials = RecentAutoReviewDenials::default();
             self.clear_thread_usage_state();
         }
+        self.reset_overload_recovery();
         self.turn_lifecycle.reset_thread();
         self.safety_recourse = None;
         self.clear_safety_buffering();
@@ -350,6 +351,7 @@ impl ChatWidget {
         self.current_rollout_path = rollout_path;
         self.clear_background_terminals();
         self.input_queue.clear();
+        self.reset_overload_recovery();
         self.reset_realtime_conversation();
         // Finish any output not yet drained from the old runtime without live completion actions.
         self.on_task_complete(

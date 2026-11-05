@@ -374,6 +374,32 @@ impl ChatWidget {
                 self.rate_limit_switch_prompt = RateLimitSwitchPromptState::Pending;
             }
 
+            if self.input_queue.quota_exhausted
+                && is_codex_limit
+                && matches!(source, RateLimitSnapshotSource::AccountUsage)
+            {
+                let quota_exhausted = workspace_limit_reached
+                    || (!has_workspace_credits
+                        && (snapshot.rate_limit_reached_type.is_some()
+                            || [snapshot.primary.as_ref(), snapshot.secondary.as_ref()]
+                                .into_iter()
+                                .flatten()
+                                .any(|window| window.used_percent >= 100)));
+                let quota_available = !quota_exhausted
+                    && (has_workspace_credits
+                        || snapshot.primary.is_some()
+                        || snapshot.secondary.is_some());
+                if quota_exhausted {
+                    self.input_queue.quota_exhausted = true;
+                    self.bottom_pane.set_queue_submissions(true);
+                } else if quota_available && self.input_queue.quota_exhausted {
+                    self.input_queue.quota_exhausted = false;
+                    self.bottom_pane
+                        .set_queue_submissions(!self.is_session_configured());
+                    self.maybe_send_next_queued_input();
+                }
+            }
+
             // /wham/usage identifies ordinary and additional model limits separately. Streamed
             // updates still drive warnings/recovery above, but must not overwrite status data.
             if matches!(source, RateLimitSnapshotSource::AccountUsage) {

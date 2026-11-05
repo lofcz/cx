@@ -252,6 +252,7 @@ impl ChatWidget {
             || self.fork_in_progress
             || self.has_misalignment_policy_violation()
             || self.input_queue.submissions_paused()
+            || self.overload_recovery.waiting()
             || self.input_queue.rate_limit_recovery_pending
             || self.input_queue.recovered_queue
             || self.input_queue.has_unconfirmed_messages()
@@ -263,6 +264,10 @@ impl ChatWidget {
         }
         if self.is_user_turn_pending_or_running() {
             return false;
+        }
+        if self.take_overload_resume() && !self.has_queued_follow_up_messages() {
+            self.submit_user_message(UserMessage::from("Continue"));
+            return true;
         }
         let mut submitted_follow_up = false;
         while !self.is_user_turn_pending_or_running() {

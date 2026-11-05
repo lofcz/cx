@@ -308,6 +308,8 @@ async fn new_config(
         tui_copy_on_select_clear_selection: false,
         tui_right_click_paste: Default::default(),
         tui_alternate_screen: AltScreenMode::Auto,
+        tui_status_header: false,
+        tui_server_overloaded_resume: false,
         tui_status_line: None,
         tui_status_line_use_colors: true,
         tui_terminal_title: None,
