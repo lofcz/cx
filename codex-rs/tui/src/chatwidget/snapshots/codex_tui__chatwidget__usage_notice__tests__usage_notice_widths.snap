@@ -1,13 +1,14 @@
 ---
 source: tui/src/chatwidget/usage_notice_tests.rs
+assertion_line: 70
 expression: "lines.join(\"\\n\")"
 ---
-98 columns: ⚠ 5h limit: 8% left · resets at 1:00 PM · /status
-97 columns: ⚠ 5h limit: 8% left · /status
-58 columns: ⚠ 5h limit: 8% left · /status
-57 columns: ⚠ 5h limit: 8% left
-38 columns: ⚠ 5h limit: 8% left
-37 columns: ⚠ 5h 8% left
-12 columns: ⚠ 5h 8% left
-11 columns:
+98 columns: Usage 8% left · resets 1:00 PM
+97 columns: Usage 8% left · resets 1:00 PM
+58 columns: Usage 8% left · resets 1:00 PM
+57 columns: Usage 8% left · resets 1:00 PM
+38 columns: Usage 8% left · resets 1:00 PM
+37 columns: Usage 8% left · resets 1:00 PM
+12 columns: Usage 8%
+11 columns: Usage 8%
 0 columns:
