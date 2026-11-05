@@ -62,6 +62,9 @@ just test \
     (package(codex-core) & test(steer_waits_for_non_native_sse_response_to_complete)) |
     (package(codex-core) & test(multi_agent_config_precedence_overrides_remote_model_selector)) |
     (package(codex-core) & test(claude_file_tools_require_read_track_edits_and_reject_external_changes)) |
+    (package(codex-tui) & test(codext_)) |
+    (package(codex-tui) & test(resume_picker)) |
+    (package(codex-tui) & test(rate_limit_recovery)) |
     (package(codex-tui) & test(side_model)) |
     (package(codex-tui) & test(open_agent_picker_selects_path_backed_agent)) |
     (package(codex-tui) & test(pending_input_preview::tests)) |
