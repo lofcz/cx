@@ -1133,7 +1133,7 @@ impl Daemon {
         }
 
         let managed_codex_path = self.managed_codex_bin.display();
-        let install_command = "curl -fsSL https://github.com/yuguorui/codex-plus/releases/latest/download/install-fork.sh | sh";
+        let install_command = "curl -fsSL https://github.com/lofcz/codex-plus/releases/latest/download/install-fork.sh | sh";
         Err(anyhow!(
             "managed standalone Codex++ install not found at {managed_codex_path}\n\n\
              This command requires the standalone install managed by the Codex++ installer, because \

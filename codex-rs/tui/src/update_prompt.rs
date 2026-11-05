@@ -41,7 +41,7 @@ use ratatui::widgets::Wrap;
 #[cfg(not(debug_assertions))]
 use tokio_stream::StreamExt;
 
-const RELEASE_NOTES_URL: &str = "https://github.com/yuguorui/codex-plus/releases/latest";
+const RELEASE_NOTES_URL: &str = "https://github.com/lofcz/codex-plus/releases/latest";
 
 #[cfg(not(debug_assertions))]
 pub(crate) enum UpdatePromptOutcome {

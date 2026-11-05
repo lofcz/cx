@@ -56,8 +56,8 @@ pub fn get_upgrade_version(config: &Config) -> Option<String> {
 }
 
 const RELEASE_REPOSITORY_ENV: &str = "CODEX_RELEASE_REPOSITORY";
-const DEFAULT_RELEASE_REPOSITORY: &str = "yuguorui/codex-plus";
-const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/yuguorui/codex-plus/releases/latest";
+const DEFAULT_RELEASE_REPOSITORY: &str = "lofcz/codex-plus";
+const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/lofcz/codex-plus/releases/latest";
 
 fn latest_release_url() -> String {
     match std::env::var(RELEASE_REPOSITORY_ENV)
