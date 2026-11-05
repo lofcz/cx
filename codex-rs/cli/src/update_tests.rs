@@ -13,17 +13,14 @@ use super::*;
 
 #[test]
 fn release_repository_urls_default_and_honor_override() {
-    assert_eq!(
-        release_repository_from_override(None),
-        "yuguorui/codex-plus"
-    );
+    assert_eq!(release_repository_from_override(None), "lofcz/codex-plus");
     assert_eq!(
         release_repository_from_override(Some("")),
-        "yuguorui/codex-plus"
+        "lofcz/codex-plus"
     );
     assert_eq!(
         release_repository_from_override(Some("   \t\n ")),
-        "yuguorui/codex-plus"
+        "lofcz/codex-plus"
     );
     assert_eq!(
         release_repository_from_override(Some("  acme/codex-fork  ")),
@@ -31,7 +28,7 @@ fn release_repository_urls_default_and_honor_override() {
     );
 
     assert_eq!(
-        latest_release_url_for_repo("yuguorui/codex-plus"),
+        latest_release_url_for_repo("lofcz/codex-plus"),
         LATEST_RELEASE_URL
     );
     assert_eq!(
@@ -40,11 +37,11 @@ fn release_repository_urls_default_and_honor_override() {
     );
     assert_eq!(
         release_download_url(
-            "yuguorui/codex-plus",
+            "lofcz/codex-plus",
             "202608310535",
             "codex-package_SHA256SUMS"
         ),
-        "https://github.com/yuguorui/codex-plus/releases/download/rust-v202608310535/codex-package_SHA256SUMS"
+        "https://github.com/lofcz/codex-plus/releases/download/rust-v202608310535/codex-package_SHA256SUMS"
     );
     assert_eq!(
         release_download_url(
