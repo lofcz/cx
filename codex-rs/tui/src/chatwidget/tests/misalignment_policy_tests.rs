@@ -78,9 +78,15 @@ async fn misalignment_policy_failure_stops_the_thread_and_renders_once() {
             options: None,
         }],
     );
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     chat.bottom_pane.handle_paste("answer".into());
-    chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Down,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     drain_insert_history(&mut rx);
 
     handle_error(
@@ -187,9 +193,15 @@ async fn misalignment_turn_end_discards_history_search_and_question_drafts() {
             options: None,
         }],
     );
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     chat.bottom_pane.handle_paste("answer".into());
-    chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(
+        KeyCode::Down,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
     chat.handle_key_event(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL));
 
     chat.handle_server_notification(

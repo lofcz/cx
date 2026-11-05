@@ -1086,14 +1086,17 @@ async fn plan_implementation_popup_skips_when_rate_limit_prompt_pending() {
             status: StepStatus::Pending,
         }],
     });
-    chat.on_rate_limit_snapshot(Some(snapshot(/*percent*/ 92.0)));
+    let mut exhausted = snapshot(/*percent*/ 100.0);
+    exhausted.rate_limit_reached_type =
+        Some(codex_app_server_protocol::RateLimitReachedType::RateLimitReached);
+    chat.on_rate_limit_snapshot(Some(exhausted));
     chat.on_task_complete(
         /*last_agent_message*/ None, /*completion*/ None, /*from_replay*/ false,
     );
 
     let popup = render_bottom_popup(&chat, /*width*/ 80);
     assert!(
-        popup.contains("Approaching rate limits"),
+        popup.contains("Usage limit reached"),
         "expected rate limit popup, got {popup:?}"
     );
     assert!(

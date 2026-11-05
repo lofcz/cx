@@ -525,13 +525,13 @@ struct LoginCommand {
 
     #[arg(
         long = "with-api-key",
-        help = "Read the API key from stdin (e.g. `printenv OPENAI_API_KEY | codex++ login --with-api-key`)"
+        help = "Read the API key from stdin (e.g. `printenv OPENAI_API_KEY | cc login --with-api-key`)"
     )]
     with_api_key: bool,
 
     #[arg(
         long = "with-access-token",
-        help = "Read the access token from stdin (e.g. `printenv CODEX_ACCESS_TOKEN | codex++ login --with-access-token`)"
+        help = "Read the access token from stdin (e.g. `printenv CODEX_ACCESS_TOKEN | cc login --with-access-token`)"
     )]
     with_access_token: bool,
 
@@ -1027,7 +1027,7 @@ async fn dispatch_cli(
         && let Some(agents_endpoint) = &options.remote.remote
         && root_endpoint != agents_endpoint
     {
-        anyhow::bail!("`codex++ agents` received conflicting remote server endpoints");
+        anyhow::bail!("`cc agents` received conflicting remote server endpoints");
     }
     let root_remote = agents_options
         .and_then(|options| options.remote.remote.clone())
@@ -1063,7 +1063,7 @@ async fn dispatch_cli(
             );
             if open_agents_overview {
                 if interactive.prompt.is_some() || !interactive.images.is_empty() {
-                    anyhow::bail!("`codex++ agents` does not accept an initial prompt or images");
+                    anyhow::bail!("`cc agents` does not accept an initial prompt or images");
                 }
                 if root_remote.is_some()
                     && (interactive.oss
@@ -1081,7 +1081,7 @@ async fn dispatch_cli(
                             }))
                 {
                     anyhow::bail!(
-                        "`codex++ agents` cannot apply local provider or additional-directory overrides to a remote server"
+                        "`cc agents` cannot apply local provider or additional-directory overrides to a remote server"
                     );
                 }
                 interactive.agents_overview = true;
@@ -1618,7 +1618,7 @@ async fn dispatch_cli(
                         .await;
                     } else if login_cli.api_key.is_some() {
                         eprintln!(
-                            "The --api-key flag is no longer supported. Pipe the key instead, e.g. `printenv OPENAI_API_KEY | codex++ login --with-api-key`."
+                            "The --api-key flag is no longer supported. Pipe the key instead, e.g. `printenv OPENAI_API_KEY | cc login --with-api-key`."
                         );
                         std::process::exit(1);
                     } else if login_cli.with_api_key {
@@ -1748,7 +1748,7 @@ async fn dispatch_cli(
             #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
             {
                 let _ = loader_overrides;
-                anyhow::bail!("`codex++ sandbox` is not supported on this operating system");
+                anyhow::bail!("`cc sandbox` is not supported on this operating system");
             }
         }
         Some(Subcommand::Debug(DebugCommand { subcommand })) => match subcommand {
@@ -1929,7 +1929,7 @@ fn profile_v2_for_subcommand<'a>(
             subcommand: DebugSubcommand::PromptInput(_),
         }) => Ok(Some(profile_v2)),
         _ => anyhow::bail!(
-            "--profile only applies to runtime commands, `codex++ mcp`, and `codex++ migrate-nfs-db`: `codex++`, `codex++ exec`, `codex++ review`, `codex++ resume`, `codex++ queue`, `codex++ archive`, `codex++ delete`, `codex++ unarchive`, `codex++ fork`, `codex++ mcp`, `codex++ migrate-nfs-db`, `codex++ sandbox`, and `codex++ debug prompt-input`."
+            "--profile only applies to runtime commands, `cc mcp`, and `cc migrate-nfs-db`: `cc`, `cc exec`, `cc review`, `cc resume`, `cc queue`, `cc archive`, `cc delete`, `cc unarchive`, `cc fork`, `cc mcp`, `cc migrate-nfs-db`, `cc sandbox`, and `cc debug prompt-input`."
         ),
     }
 }
@@ -2251,12 +2251,12 @@ fn reject_unsupported_worktree_for_subcommand(
         None => Ok(()),
         Some(Subcommand::Fork(command)) if command.session_id.is_some() && !command.last => Ok(()),
         Some(Subcommand::Fork(_)) => {
-            anyhow::bail!("`codex++ fork --worktree` requires an explicit session ID")
+            anyhow::bail!("`cc fork --worktree` requires an explicit session ID")
         }
         Some(Subcommand::Exec(command)) => match &command.command {
             None | Some(ExecCommand::Fork(_)) => Ok(()),
             Some(ExecCommand::Resume(_)) => anyhow::bail!(
-                "`--worktree` cannot resume an existing session; use `codex++ exec fork --worktree`"
+                "`--worktree` cannot resume an existing session; use `cc exec fork --worktree`"
             ),
             Some(ExecCommand::Review(_)) => {
                 anyhow::bail!("`--worktree` is not supported for code review")
@@ -2264,7 +2264,7 @@ fn reject_unsupported_worktree_for_subcommand(
         },
         _ => {
             anyhow::bail!(
-                "`--worktree` supports new interactive sessions, `codex++ fork`, `codex++ exec`, and `codex++ exec fork`"
+                "`--worktree` supports new interactive sessions, `cc fork`, `cc exec`, and `cc exec fork`"
             )
         }
     }
@@ -2359,7 +2359,7 @@ fn reject_strict_config_for_unsupported_subcommand(
     subcommand: &str,
 ) -> anyhow::Result<()> {
     if strict_config {
-        anyhow::bail!("`--strict-config` is not supported for `codex++ {subcommand}`");
+        anyhow::bail!("`--strict-config` is not supported for `cc {subcommand}`");
     }
     Ok(())
 }
@@ -2604,7 +2604,7 @@ fn confirm(prompt: &str) -> std::io::Result<bool> {
     Ok(answer.eq_ignore_ascii_case("y") || answer.eq_ignore_ascii_case("yes"))
 }
 
-/// Build the final `TuiCli` for a `codex++ resume` invocation.
+/// Build the final `TuiCli` for a `cc resume` invocation.
 fn finalize_resume_interactive(
     mut interactive: TuiCli,
     root_config_overrides: CliConfigOverrides,
@@ -2639,7 +2639,7 @@ fn finalize_resume_interactive(
     interactive
 }
 
-/// Build the final `TuiCli` for a `codex++ fork` invocation.
+/// Build the final `TuiCli` for a `cc fork` invocation.
 fn finalize_fork_interactive(
     mut interactive: TuiCli,
     root_config_overrides: CliConfigOverrides,
@@ -2742,7 +2742,7 @@ fn merge_interactive_cli_flags(interactive: &mut TuiCli, subcommand_cli: TuiCli)
 
 fn print_completion(cmd: CompletionCommand) {
     let mut app = MultitoolCli::command();
-    let name = "codex++";
+    let name = "cc";
     generate(cmd.shell, &mut app, name, &mut std::io::stdout());
 }
 
@@ -3434,15 +3434,15 @@ enabled = true
     fn plugin_marketplace_help_uses_plugin_namespace() {
         let help = help_from_args(&["codex", "plugin", "marketplace", "--help"]);
         assert!(
-            help.contains("Usage: codex++ plugin marketplace [OPTIONS] <COMMAND>"),
+            help.contains("Usage: cc plugin marketplace [OPTIONS] <COMMAND>"),
             "{help}"
         );
 
         for (subcommand, usage) in [
-            ("add", "Usage: codex++ plugin marketplace add"),
-            ("list", "Usage: codex++ plugin marketplace list"),
-            ("upgrade", "Usage: codex++ plugin marketplace upgrade"),
-            ("remove", "Usage: codex++ plugin marketplace remove"),
+            ("add", "Usage: cc plugin marketplace add"),
+            ("list", "Usage: cc plugin marketplace list"),
+            ("upgrade", "Usage: cc plugin marketplace upgrade"),
+            ("remove", "Usage: cc plugin marketplace remove"),
         ] {
             let help = help_from_args(&["codex", "plugin", "marketplace", subcommand, "--help"]);
             assert!(help.contains(usage), "{help}");
@@ -3750,7 +3750,7 @@ enabled = true
                 );
                 exit_info.disconnect_info = Some(codex_tui::DisconnectInfo {
                     command: vec![
-                        "codex++".to_string(),
+                        "cc".to_string(),
                         "--remote".to_string(),
                         "wss://example.com:443/".to_string(),
                     ],
@@ -3767,8 +3767,8 @@ enabled = true
             vec![
                 "Disconnected from this task. Any running work continues.",
                 "To reconnect, run:",
-                "  codex++ --remote wss://example.com:443/ --remote-auth-token-env CODEX_REMOTE_TOKEN resume 123e4567-e89b-12d3-a456-426614174000",
-                "Stop the current turn: run codex++ --remote wss://example.com:443/ --remote-auth-token-env CODEX_REMOTE_TOKEN agents, select this task, and press ctrl + x.",
+                "  cc --remote wss://example.com:443/ --remote-auth-token-env CODEX_REMOTE_TOKEN resume 123e4567-e89b-12d3-a456-426614174000",
+                "Stop the current turn: run cc --remote wss://example.com:443/ --remote-auth-token-env CODEX_REMOTE_TOKEN agents, select this task, and press ctrl + x.",
                 "Token usage so far: total=2 input=0 output=2",
             ]
         );
@@ -3816,7 +3816,7 @@ enabled = true
             vec![
                 "Token usage: total=2 input=0 output=2".to_string(),
                 "To continue this session, run:".to_string(),
-                "  codex++ resume 123e4567-e89b-12d3-a456-426614174000".to_string(),
+                "  cc resume 123e4567-e89b-12d3-a456-426614174000".to_string(),
             ]
         );
     }
@@ -3831,7 +3831,7 @@ enabled = true
                 insta::assert_snapshot!(lines.join("\n"), @"
                 Token usage: total=2 input=0 output=2
                 To continue this session, run:
-                  codex++ resume 123e4567-e89b-12d3-a456-426614174000
+                  cc resume 123e4567-e89b-12d3-a456-426614174000
                 ");
             }
         }
@@ -3849,7 +3849,7 @@ enabled = true
             vec![
                 "Token usage: total=2 input=0 output=2",
                 "To continue this session, run:",
-                "  \u{1b}[36mcodex++ resume 123e4567-e89b-12d3-a456-426614174000\u{1b}[39m",
+                "  \u{1b}[36mcc resume 123e4567-e89b-12d3-a456-426614174000\u{1b}[39m",
             ]
         );
     }
@@ -3864,8 +3864,8 @@ enabled = true
         insta::assert_snapshot!(lines.join("\n"), @"
         Token usage: total=2 input=0 output=2
         To continue this session, run:
-          codex++ resume 123e4567-e89b-12d3-a456-426614174000
-        Or run codex++ resume and select my-thread.
+          cc resume 123e4567-e89b-12d3-a456-426614174000
+        Or run cc resume and select my-thread.
         ");
     }
 
@@ -3881,8 +3881,8 @@ enabled = true
             vec![
                 "Token usage: total=2 input=0 output=2",
                 "To continue this session, run:",
-                "  \u{1b}[36mcodex++ resume 123e4567-e89b-12d3-a456-426614174000\u{1b}[39m",
-                "Or run \u{1b}[36mcodex++ resume\u{1b}[39m and select \u{1b}[36mmy-thread\u{1b}[39m.",
+                "  \u{1b}[36mcc resume 123e4567-e89b-12d3-a456-426614174000\u{1b}[39m",
+                "Or run \u{1b}[36mcc resume\u{1b}[39m and select \u{1b}[36mmy-thread\u{1b}[39m.",
             ]
         );
     }
@@ -4289,7 +4289,7 @@ enabled = true
 
         assert_eq!(
             err.to_string(),
-            "`--strict-config` is not supported for `codex++ mcp`"
+            "`--strict-config` is not supported for `cc mcp`"
         );
 
         let cli = MultitoolCli::try_parse_from(["codex", "--strict-config", "remote-control"])
@@ -4302,7 +4302,7 @@ enabled = true
 
         assert_eq!(
             err.to_string(),
-            "`--strict-config` is not supported for `codex++ remote-control`"
+            "`--strict-config` is not supported for `cc remote-control`"
         );
     }
 
@@ -4318,7 +4318,7 @@ enabled = true
 
         assert_eq!(
             err.to_string(),
-            "`--strict-config` is not supported for `codex++ app-server proxy`"
+            "`--strict-config` is not supported for `cc app-server proxy`"
         );
     }
 

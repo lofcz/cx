@@ -6,7 +6,7 @@ use codex_app_server_protocol::DynamicToolCallStatus;
 use pretty_assertions::assert_eq;
 
 #[tokio::test]
-async fn quota_warnings_are_emitted_once_and_survive_native_replay() -> Result<()> {
+async fn cc_advance_quota_warnings_stay_out_of_native_history_and_replay() -> Result<()> {
     for initial_replay in [false, true] {
         let (mut app, mut events, _ops) = crate::app::tests::make_test_app_with_channels().await;
         let mut tui = crate::tui::test_support::make_test_tui()?;
@@ -31,16 +31,14 @@ async fn quota_warnings_are_emitted_once_and_survive_native_replay() -> Result<(
         }
         app.finish_initial_history_replay_buffer(&mut tui);
         let inserted = tui.pending_history_lines_for_test();
-        insta::allow_duplicates! {
-            insta::assert_snapshot!("native_quota_warning", inserted.iter().map(|line| line.line.to_string()).collect::<Vec<_>>().join("\n"));
-        }
+        assert!(inserted.is_empty());
         assert_eq!(
             app.render_transcript_lines_for_reflow(/*width*/ 80).lines,
             inserted
         );
         app.flush_native_history(&mut tui);
         assert_eq!(tui.pending_history_lines_for_test(), inserted);
-        assert_eq!(history_cell::warning_count(&app.transcript_cells), 2);
+        assert_eq!(history_cell::warning_count(&app.transcript_cells), 1);
     }
     Ok(())
 }

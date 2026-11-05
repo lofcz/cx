@@ -5,7 +5,6 @@ use crate::footer_hint::first_fitting_line;
 use chrono::DateTime;
 use chrono::Local;
 use ratatui::style::Style;
-use ratatui::style::Stylize;
 use ratatui::text::Line;
 
 #[derive(Clone, Copy, PartialEq)]
