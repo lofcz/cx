@@ -1,24 +1,24 @@
-<p align="center"><strong>CC</strong> is a Codex fork with custom providers, agent workflows, prompt selection, and a compact usage footer. It extends yuguorui/codex-plus with selected Codext features.</p>
+<p align="center"><strong>CX</strong> is a Codex fork with custom providers, agent workflows, prompt selection, and a compact usage footer. It extends yuguorui/codex-plus with selected Codext features.</p>
 
-<p align="center">Run <code>cc</code> in your interactive shell. The local launcher shares your existing Codex configuration and sessions.</p>
+<p align="center">Run <code>cx</code> in your shell. The local launcher shares your existing Codex configuration and sessions.</p>
 
 ---
 
-## What is CC?
+## What is CX?
 
-CC extends the official [Codex CLI](https://github.com/openai/codex) with:
+CX extends the official [Codex CLI](https://github.com/openai/codex) with:
 
 - **Bongo Cat, obviously** - our most powerful (and cutest) feature. Pick it from `/pets` and it will drum along while you type. Image-capable terminals get the full sprite animation; everyone else gets a terminal-native ASCII cat.
 - **Upstream updates** - yuguorui/codex-plus follows upstream Codex daily. This fork preserves its additions through explicit, tested updates.
 - **Dynamic multi-agent workflows** - run deterministic JavaScript orchestration in the background with parallel agents, structured outputs, worktree isolation, retries, resumable runs, and live progress in `/workflows`.
-- **Universal provider support** - connect CC to any provider through either native wire protocol:
+- **Universal provider support** - connect CX to any provider through either native wire protocol:
   - **Chat Completions API** (`wire_api = "chat"`) - works with OpenAI-compatible providers including Ollama, vLLM, LiteLLM, DeepSeek, Mistral, Groq, Together, DashScope, and more, with cross-provider `reasoning_effort` projection (`low`/`high`/`max`) and `thinking_budget` reconciliation.
   - **Anthropic Messages API** (`wire_api = "anthropic"`) - use Claude models directly through Anthropic's native API with `output_config.effort` mapping, automatic ephemeral prompt caching, and configurable `capabilities.max_output_tokens`.
   - **Flexible endpoint & auth controls** - override `base_url` from the environment via `env_base_url`, pick `Bearer` or `x-api-key` auth via `env_key_auth`, and tune Responses-compatible gateway quirks with `[model_providers.<id>.capabilities]` (`supports_custom_exec_tool`, `supports_native_tool_search`, `max_output_tokens`).
   - **Provider-specific request fields** (`extra_body`) - merge arbitrary JSON into request bodies for provider-specific features like `enable_thinking`, `thinking_budget`, or custom `thinking` blocks.
   - **Non-GPT-friendly file tools** - offer hashline editing (`fuzz_view_edit`) alongside `apply_patch` and Claude Code-compatible structured `Read` / `Edit` tools (`apply_patch_tool_type = "claude_code"`), giving models that struggle with freeform patches more reliable alternatives.
 - **Sharper TUI & streaming reliability** - cancel pending steers with double-`Esc` (`esc esc`) before the model consumes them, pause queued messages after pre-send validation failures, switch models thread-locally inside side conversations via `/model`, search subagents in `/agents`, and avoid discarding non-interruptible SSE streams when steering mid-turn.
-- **More control** - make CC adapt to your setup, not the other way around:
+- **More control** - make CX adapt to your setup, not the other way around:
   - **Multi-agent v2 opt-out** (`features.multi_agent_v2 = false`) - honor an explicit local disable even when the model catalog selects v2, so third-party providers are not forced onto its Responses API-specific namespaced and encrypted-schema tool protocol.
   - **Always retry** - automatically apply exponential backoff for HTTP 429, 5xx, `ServerOverloaded`, and transport errors.
 - **Third-party memory compatibility** - use the active thread model for memory extraction and consolidation on non-OpenAI providers instead of sending provider-incompatible OpenAI model names.
@@ -33,8 +33,8 @@ See [fork features and maintenance](docs/fork-features.md) for prompt selection,
 
 ### Use the local installation
 
-Run `cc` in Fish. See [Local launcher](docs/fork-features.md#local-launcher) for installation details.
-The private launcher preserves the system C compiler used by builds.
+Run `cx` in your shell. See [Local launcher](docs/fork-features.md#local-launcher) for installation details.
+The command leaves the system C compiler, `cc`, available to builds.
 
 ### Install a published package
 
@@ -69,16 +69,16 @@ With the local launcher installed:
 
 ```shell
 # Use with a Chat Completions provider
-cc -m ollama/qwen3
-cc -m deepseek/deepseek-chat
-cc -m dashscope/qwen-plus
+cx -m ollama/qwen3
+cx -m deepseek/deepseek-chat
+cx -m dashscope/qwen-plus
 
 # Use with Anthropic
-cc -m anthropic/claude-sonnet-4-20250514
+cx -m anthropic/claude-sonnet-4-20250514
 
 # Use with reasoning effort control
-cc -m deepseek/deepseek-chat --reasoning-effort low
-cc -m anthropic/claude-sonnet-4-20250514 --reasoning-effort high
+cx -m deepseek/deepseek-chat --reasoning-effort low
+cx -m anthropic/claude-sonnet-4-20250514 --reasoning-effort high
 ```
 
 ## Typing-reactive Bongo Cat
@@ -94,7 +94,7 @@ Run the deep-research workflow on the current state of local-first AI coding too
 Run a high-effort code-review workflow on the current branch.
 ```
 
-CC includes `deep-research` and `code-review` workflows. It also discovers saved `.js` workflows from active plugins, `$CODEX_HOME/workflows`, and personal Claude workflows: `CLAUDE_CONFIG_DIR/workflows` when `CLAUDE_CONFIG_DIR` is set, otherwise `~/.claude/workflows`. Project discovery checks `.codex/workflows` and `.claude/workflows` at every directory from the current working directory up to the filesystem root. Saved workflows override bundled and plugin workflows. Project workflows take priority over personal ones; within the same directory, `.codex/workflows` wins over `.claude/workflows`; and the closest project directory to the current working directory wins. Only `.js` files are accepted. Workflow scripts can compose `agent()`, `pipeline()`, and `parallel()` calls, validate structured results with JSON Schema, and isolate mutating agents in temporary Git worktrees.
+CX includes `deep-research` and `code-review` workflows. It also discovers saved `.js` workflows from active plugins, `$CODEX_HOME/workflows`, and personal Claude workflows: `CLAUDE_CONFIG_DIR/workflows` when `CLAUDE_CONFIG_DIR` is set, otherwise `~/.claude/workflows`. Project discovery checks `.codex/workflows` and `.claude/workflows` at every directory from the current working directory up to the filesystem root. Saved workflows override bundled and plugin workflows. Project workflows take priority over personal ones; within the same directory, `.codex/workflows` wins over `.claude/workflows`; and the closest project directory to the current working directory wins. Only `.js` files are accepted. Workflow scripts can compose `agent()`, `pipeline()`, and `parallel()` calls, validate structured results with JSON Schema, and isolate mutating agents in temporary Git worktrees.
 
 Runs continue in the background after launch. Open `/workflows` in the TUI to inspect phases and agents, stop a run, or skip and retry individual agents. For command-line use and quick validation:
 
