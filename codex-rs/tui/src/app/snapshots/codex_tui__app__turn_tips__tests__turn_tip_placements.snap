@@ -1,6 +1,6 @@
 ---
 source: tui/src/app/turn_tips_tests.rs
-assertion_line: 387
+assertion_line: 393
 expression: "crate::chatwidget::tests::helpers::normalize_snapshot_paths(screens.join(\"\\n\\n\"))"
 ---
 working=true, response rows=1, 80x12
@@ -153,7 +153,7 @@ working=false, response rows=1, 12x12
 › Ask Codex
 
   gpt-test …
-  ? for shor
+  ? for sh
 
 working=false, response rows=1, 80x4
 
