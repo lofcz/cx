@@ -66,7 +66,7 @@ running.
 For a new remote machine:
 
 ```sh
-curl -fsSL https://github.com/yuguorui/codex/releases/latest/download/install-fork.sh | sh
+curl -fsSL https://github.com/lofcz/codex-plus/releases/latest/download/install-fork.sh | sh
 $HOME/.codex/packages/standalone/current/bin/codex++ app-server daemon bootstrap --remote-control
 ```
 
