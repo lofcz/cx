@@ -5,7 +5,6 @@ use crate::footer_hint::first_fitting_line;
 use chrono::DateTime;
 use chrono::Local;
 use ratatui::style::Style;
-use ratatui::style::Stylize;
 use ratatui::text::Line;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -19,6 +18,12 @@ pub(crate) struct UsageIndicator {
 
 impl UsageIndicator {
     pub(crate) fn line(self, width: u16, now: DateTime<Local>) -> Option<Line<'static>> {
+        let line = first_fitting_line(self.labels(now), width);
+        (!line.spans.is_empty()).then_some(line.style(self.style()))
+    }
+
+    /// Longest to shortest forms, matching the warning label collapse order.
+    pub(crate) fn labels(self, now: DateTime<Local>) -> [Line<'static>; 3] {
         let remaining = 100 - self.used_percent.clamp(0, 100);
         let summary = if self.limit_reached {
             "Usage limit reached".to_string()
@@ -49,19 +54,18 @@ impl UsageIndicator {
         } else {
             format!("Usage {remaining}%")
         };
-        let line = first_fitting_line(
-            [
-                Line::from(format!("{summary}{reset}")),
-                Line::from(summary),
-                Line::from(compact),
-            ],
-            width,
-        );
-        let style = if self.limit_reached {
+        [
+            Line::from(format!("{summary}{reset}")),
+            Line::from(summary),
+            Line::from(compact),
+        ]
+    }
+
+    fn style(self) -> Style {
+        if self.limit_reached {
             Style::default().red()
         } else {
             Style::default().cyan()
-        };
-        (!line.spans.is_empty()).then_some(line.style(style))
+        }
     }
 }
