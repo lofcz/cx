@@ -187,6 +187,7 @@ impl PickerState {
     /// and reopen the editor on failure so the user can retry.
     pub(super) fn handle_rename_result(
         &mut self,
+        backend_id: BackendId,
         thread_id: ThreadId,
         name: String,
         result: std::io::Result<()>,
@@ -194,18 +195,23 @@ impl PickerState {
         let was_pending = matches!(
             self.rename_state,
             RenameState::Saving {
+                backend_id: pending_backend,
                 thread_id: pending_id,
                 name: ref pending_name,
                 ..
-            } if pending_id == thread_id && *pending_name == name
+            } if pending_backend == backend_id && pending_id == thread_id && *pending_name == name
         );
         match result {
             Ok(()) => {
-                self.inline_error = None;
+                if was_pending {
+                    self.inline_error = None;
+                }
                 // Apply even when the user cancelled the wait: the name did
                 // change server-side, so the row should reflect it.
                 for row in self.all_rows.iter_mut() {
-                    if row.thread_id == Some(thread_id) {
+                    if row.thread_id == Some(thread_id)
+                        && row.backend_id.unwrap_or(self.backend_id) == backend_id
+                    {
                         row.thread_name = Some(name.clone());
                     }
                 }
@@ -213,29 +219,25 @@ impl PickerState {
                     self.rename_state = RenameState::Idle;
                 }
                 self.apply_filter();
-                if let Some(selected) = self
-                    .filtered_rows
-                    .iter()
-                    .position(|row| row.thread_id == Some(thread_id))
+                if was_pending
+                    && let Some(selected) = self.filtered_rows.iter().position(|row| {
+                        row.thread_id == Some(thread_id)
+                            && row.backend_id.unwrap_or(self.backend_id) == backend_id
+                    })
                 {
                     self.selected = selected;
                     self.ensure_selected_visible();
                 }
             }
             Err(error) => {
-                if was_pending {
-                    let backend_id = self
-                        .all_rows
-                        .iter()
-                        .find(|row| row.thread_id == Some(thread_id))
-                        .and_then(|row| row.backend_id)
-                        .unwrap_or(self.backend_id);
-                    self.rename_state = RenameState::Editing {
-                        backend_id,
-                        thread_id,
-                        draft: name,
-                    };
+                if !was_pending {
+                    return;
                 }
+                self.rename_state = RenameState::Editing {
+                    backend_id,
+                    thread_id,
+                    draft: name,
+                };
                 self.inline_error = Some(format!("Failed to rename session: {error}"));
             }
         }
@@ -267,6 +269,7 @@ mod tests {
             name: "new name".into(),
         };
         state.handle_rename_result(
+            state.backend_id,
             thread_id,
             "new name".into(),
             Err(std::io::Error::other("offline")),
@@ -279,8 +282,33 @@ mod tests {
             thread_id,
             name: "new name".into(),
         };
-        state.handle_rename_result(thread_id, "new name".into(), Ok(()));
+        state.handle_rename_result(state.backend_id, thread_id, "new name".into(), Ok(()));
         assert_eq!(state.rename_state, RenameState::Idle);
         assert_eq!(state.all_rows[0].thread_name.as_deref(), Some("new name"));
+    }
+
+    #[test]
+    fn codext_rename_result_stays_with_its_backend() {
+        let (mut state, _) = local_db_first_state();
+        let thread_id = ThreadId::new();
+        let other_backend = BackendId::new();
+        let mut local = make_row("local.jsonl", "2026-11-05T12:00:00Z", "local");
+        local.thread_id = Some(thread_id);
+        let mut remote = local.clone();
+        remote.backend_id = Some(other_backend);
+        state.all_rows = vec![local, remote];
+        state.handle_rename_result(other_backend, thread_id, "remote name".into(), Ok(()));
+        assert_eq!(state.all_rows[0].thread_name, None);
+        assert_eq!(
+            state.all_rows[1].thread_name.as_deref(),
+            Some("remote name")
+        );
+        state.handle_rename_result(
+            other_backend,
+            thread_id,
+            "old name".into(),
+            Err(std::io::Error::other("stale")),
+        );
+        assert!(state.inline_error.is_none());
     }
 }
