@@ -21,7 +21,7 @@ impl ChatComposer {
     }
 
     pub(super) fn show_warning_notice(&self, options: ComposerRenderOptions<'_>) -> bool {
-        options.warning_count > 0
+        (options.warning_count > 0 || options.usage_indicator.is_some())
             && !options.footer.is_some_and(|footer| footer.is_interactive)
             && matches!(self.popups.active, ActivePopup::None)
             && self.footer_mode().shows_passive_line(self.is_task_running)
@@ -49,10 +49,16 @@ impl ChatComposer {
             let hint_width = footer.text.width().min(usize::from(available)) as u16;
             budget = budget.min(available.saturating_sub(hint_width.saturating_add(/*rhs*/ 2)));
         }
-        if budget < Line::from(format!("⚠ {}", options.warning_count)).width() as u16 {
+        if options.usage_indicator.is_none()
+            && budget < Line::from(format!("⚠ {}", options.warning_count)).width() as u16
+        {
             return None;
         }
-        let line = self.warning_notice(options.warning_count, budget);
+        let line = if let Some(usage) = options.usage_indicator {
+            usage.line(budget, chrono::Local::now())?
+        } else {
+            self.warning_notice(options.warning_count, budget)
+        };
         let width = line.width() as u16;
         let area = Rect::new(
             hint_area.right().saturating_sub(width + 1),
