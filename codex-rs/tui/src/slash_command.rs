@@ -45,6 +45,7 @@ pub enum SlashCommand {
     Voice,
     Goal,
     Agents,
+    Workflow,
     Workflows,
     Agent,
     Side,
@@ -147,6 +148,7 @@ impl SlashCommand {
             SlashCommand::Voice => "start or stop voice; use /voice settings to choose a voice",
             SlashCommand::Goal => "set or view the goal for a long-running task",
             SlashCommand::Agents => "open the agent command center",
+            SlashCommand::Workflow => "create, edit, delete, or run workflows",
             SlashCommand::Workflows => "view and control dynamic workflow runs",
             SlashCommand::Agent | SlashCommand::MultiAgents => "switch the active agent thread",
             SlashCommand::Side | SlashCommand::Btw => {
@@ -180,7 +182,8 @@ impl SlashCommand {
     pub fn supports_inline_args(self) -> bool {
         matches!(
             self,
-            SlashCommand::Review
+            SlashCommand::Workflow
+                | SlashCommand::Review
                 | SlashCommand::Model
                 | SlashCommand::Permissions
                 | SlashCommand::Title
@@ -312,6 +315,7 @@ impl SlashCommand {
             | SlashCommand::App
             | SlashCommand::Goal
             | SlashCommand::Voice
+            | SlashCommand::Workflow
             | SlashCommand::Workflows
             | SlashCommand::Mcp
             | SlashCommand::Apps
