@@ -878,8 +878,8 @@ pub struct Tui {
     #[serde(default)]
     pub status_header: bool,
 
-    /// Resume overloaded turns with bounded exponential backoff.
-    #[serde(default)]
+    /// Resume overloaded turns by default: ten retries at 10 seconds, then bounded exponential backoff.
+    #[serde(default = "default_true")]
     pub server_overloaded_resume: bool,
 
     /// Preferred hosts for new conversations, indexed by project and local user identity.
