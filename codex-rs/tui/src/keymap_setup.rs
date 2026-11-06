@@ -1158,6 +1158,7 @@ mod tests {
             vec![
                 ("Open Agents", Some("unbound"), false),
                 ("Toggle Vim Mode", Some("unbound"), false),
+                ("Cancel Pending Steers", Some("unbound"), false),
                 ("Previous Permission Mode", Some("unbound"), false),
                 ("Next Permission Mode", Some("unbound"), false),
                 ("Kill Whole Line", Some("unbound"), false),
