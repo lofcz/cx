@@ -24,8 +24,8 @@ use tempfile::TempDir;
 
 mod install;
 
-const RELEASE_BASE_URL: &str = "https://gateway.lofcz.dev/dl/cx";
-const LATEST_RELEASE_URL: &str = "https://gateway.lofcz.dev/dl/cx/latest.json";
+const RELEASE_BASE_URL: &str = "https://cx.lofcz.dev";
+const LATEST_RELEASE_URL: &str = "https://cx.lofcz.dev/latest.json";
 const METADATA_TIMEOUT: Duration = Duration::from_secs(30);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const MAX_CHECKSUM_MANIFEST_BYTES: u64 = 64 * 1024;
