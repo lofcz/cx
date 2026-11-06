@@ -79,7 +79,10 @@ pub(crate) fn builtins_for_input(flags: BuiltinCommandFlags) -> Vec<(&'static st
         .filter(|(_, cmd)| flags.plugins_command_enabled || *cmd != SlashCommand::Plugins)
         .filter(|(_, cmd)| flags.token_activity_command_enabled || *cmd != SlashCommand::Usage)
         .filter(|(_, cmd)| flags.goal_command_enabled || *cmd != SlashCommand::Goal)
-        .filter(|(_, cmd)| flags.workflow_command_enabled || *cmd != SlashCommand::Workflows)
+        .filter(|(_, cmd)| {
+            flags.workflow_command_enabled
+                || !matches!(cmd, SlashCommand::Workflow | SlashCommand::Workflows)
+        })
         .filter(|(_, cmd)| flags.worktrees_enabled || *cmd != SlashCommand::Worktree)
         .filter(|(_, cmd)| flags.voice_command_enabled || *cmd != SlashCommand::Voice)
         .filter(|(_, cmd)| {

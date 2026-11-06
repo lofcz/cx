@@ -5,6 +5,7 @@
 mod agent;
 mod analyze_inputs;
 mod bundled;
+pub mod catalog;
 mod composition;
 mod control_tool;
 mod declared_inputs;
