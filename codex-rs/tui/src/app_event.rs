@@ -351,6 +351,15 @@ impl CapturedSideWork {
     }
 }
 
+#[derive(Debug, Clone)]
+pub(crate) enum WorkflowDefinitionAction {
+    Menu,
+    Run(String),
+    RunPrompt,
+    Edit(String),
+    Delete,
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, IntoStaticStr)]
 pub(crate) enum AppEvent {
@@ -1156,6 +1165,25 @@ pub(crate) enum AppEvent {
     /// Fetch lifecycle hook inventory for the current thread or working directory.
     FetchHooksList {
         target: crate::hooks_rpc::HooksListTarget,
+    },
+
+    OpenWorkflowManager {
+        thread_id: Option<ThreadId>,
+        command: String,
+    },
+    ReadWorkflowDefinition {
+        thread_id: Option<ThreadId>,
+        name: String,
+        action: WorkflowDefinitionAction,
+    },
+    DeleteWorkflowDefinition {
+        thread_id: Option<ThreadId>,
+        definition: codex_app_server_protocol::WorkflowDefinitionReadResponse,
+    },
+    SubmitWorkflowRequest {
+        thread_id: Option<ThreadId>,
+        request: String,
+        context: String,
     },
 
     /// Fetch and open dynamic workflows for the active thread.
