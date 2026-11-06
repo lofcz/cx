@@ -699,6 +699,24 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadQueueStartResponse,
     },
+    #[experimental("workflowDefinition/list")]
+    WorkflowDefinitionList => "workflowDefinition/list" {
+        params: v2::WorkflowDefinitionListParams,
+        serialization: None,
+        response: v2::WorkflowDefinitionListResponse,
+    },
+    #[experimental("workflowDefinition/read")]
+    WorkflowDefinitionRead => "workflowDefinition/read" {
+        params: v2::WorkflowDefinitionReadParams,
+        serialization: None,
+        response: v2::WorkflowDefinitionReadResponse,
+    },
+    #[experimental("workflowDefinition/delete")]
+    WorkflowDefinitionDelete => "workflowDefinition/delete" {
+        params: v2::WorkflowDefinitionDeleteParams,
+        serialization: None,
+        response: v2::WorkflowDefinitionDeleteResponse,
+    },
     #[experimental("workflow/list")]
     WorkflowList => "workflow/list" {
         params: v2::WorkflowListParams,
