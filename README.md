@@ -38,19 +38,23 @@ The command leaves the system C compiler, `cc`, available to builds.
 ### Install a published package
 
 ```shell
-curl -fsSL https://github.com/lofcz/codex-plus/releases/latest/download/install-fork.sh | sh
+curl -fsSL https://gateway.lofcz.dev/dl/cx/install-cx.sh | bash
+cx update
 ```
 
 ```powershell
 irm https://github.com/lofcz/codex-plus/releases/latest/download/install-fork.ps1 | iex
 ```
 
-The install script resolves the latest release, verifies SHA-256 checksums, stores the standalone package under `~/.codex/packages/standalone`, and installs the `codex++` command into `~/.local/bin`.
+The Linux and macOS installer downloads a verified package from Hetzner and installs `cx` into `~/.local/bin`.
+It keeps packages under `${XDG_DATA_HOME:-$HOME/.local/share}/codex-plus/standalone`.
+Run `cx update` to download later releases without a local Rust build.
+The Windows installer retains the `codex++` command and its existing package layout.
 
 Environment variables:
-- `CODEX_INSTALL_DIR` - change the install directory
-- `CODEX_BIN_NAME` - override the command name
-- `CODEX_RELEASE_REPOSITORY` - override the release repository
+- `CX_INSTALL_DIR` - change the Linux or macOS command directory
+- `XDG_DATA_HOME` - change the Linux or macOS package storage root
+- `CODEX_INSTALL_DIR` and `CODEX_BIN_NAME` - configure the Windows installer
 
 ### Build from source
 
