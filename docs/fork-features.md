@@ -69,6 +69,8 @@ The `CX daily sync` workflow runs at 04:17 UTC each day.
 It rebases the CX commits onto `yuguorui/codex-plus`, using the recorded parent commit.
 DeepSeek V4.1 Flash 1017 resolves conflicts through Vercel AI Gateway.
 The `CX_AI_GATEWAY_KEY` repository secret supplies its key.
+The `CX_SYNC_SSH_KEY` secret holds a deploy key scoped to this repository.
+Only the final push step receives that key, after validation passes.
 Set the `CX_SYNC_MODEL` repository variable to select another Gateway model.
 The local `.env` file can hold the same key; Git ignores that file.
 
