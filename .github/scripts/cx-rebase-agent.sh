@@ -17,7 +17,7 @@ Run cargo fmt from codex-rs before committing. Fold repairs into the owning comm
 and autosquash onto $CX_NEW_BASE. Do not modify .codex-plus-base; the workflow updates it later.
 Do not change CI permissions, schedules, credentials, publication destinations, or validation gates.
 Finish with a clean working tree and no active rebase. Stop if you cannot preserve behavior."
-exec codex++ exec --ephemeral --no-daemon --dangerously-bypass-approvals-and-sandbox \
+exec codex++ --no-daemon exec --ephemeral --dangerously-bypass-approvals-and-sandbox \
   --model "$cx_model" \
   -c 'model_provider="cx_gateway"' \
   -c 'model_providers.cx_gateway.name="Vercel AI Gateway"' \
