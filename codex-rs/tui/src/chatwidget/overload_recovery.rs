@@ -78,6 +78,7 @@ mod tests {
         assert!(chat.local_settings.tui.server_overloaded_resume);
         tokio::time::pause();
         for seconds in [10_u64; 10].into_iter().chain([20, 40, 80, 160, 240]) {
+            let started = tokio::time::Instant::now();
             chat.schedule_overload_recovery();
             let expected_token = chat.overload_recovery.token.unwrap();
             while events.try_recv().is_ok() {}
@@ -87,15 +88,21 @@ mod tests {
             while let Ok(event) = events.try_recv() {
                 assert!(!matches!(event, AppEvent::ServerOverloadedRetry { .. }));
             }
-            tokio::time::advance(Duration::from_millis(1)).await;
-            tokio::task::yield_now().await;
-            let mut retry_token = None;
-            while let Ok(event) = events.try_recv() {
-                if let AppEvent::ServerOverloadedRetry { token } = event {
-                    assert!(retry_token.replace(token).is_none());
+            // Tokio rounds timer deadlines to milliseconds. Await delivery rather
+            // than assuming one scheduler yield drains its timer driver.
+            let retry_token = tokio::time::timeout(Duration::from_millis(3), async {
+                while let Some(event) = events.recv().await {
+                    if let AppEvent::ServerOverloadedRetry { token } = event {
+                        return token;
+                    }
                 }
-            }
-            assert_eq!(retry_token, Some(expected_token));
+                panic!("retry event channel closed");
+            })
+            .await
+            .expect("retry must arrive at its scheduled timer tick");
+            assert_eq!(retry_token, expected_token);
+            assert!(started.elapsed() >= Duration::from_secs(seconds));
+            assert!(started.elapsed() <= Duration::from_secs(seconds) + Duration::from_millis(2));
             chat.on_server_overloaded_retry(expected_token);
             assert!(chat.take_overload_resume());
         }
