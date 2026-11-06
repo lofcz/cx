@@ -22,6 +22,9 @@ just test \
   -p codex-skills \
   -p codex-tools
 
+# CX stores binaries separately from shared authentication and session files.
+just test -p codex-install-context
+
 # The app-server protocol and daemon package layout changed in this fork.
 just test -p codex-app-server-protocol -p codex-app-server-daemon
 
@@ -52,6 +55,8 @@ just test \
     (package(codex-tui) & test(cc_)) |
     (package(codex-tui) & test(keymap)) |
     (package(codex-tui) & test(empty_state_animation)) |
+    (package(codex-tui) & test(fresh_sparkle_tests)) |
+    (package(codex-tui) & test(startup_draft)) |
     (package(codex-tui) & test(usage_notice)) |
     (package(codex-tui) & test(codext_)) |
     (package(codex-tui) & test(resume_picker)) |

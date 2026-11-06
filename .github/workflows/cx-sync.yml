@@ -123,6 +123,15 @@ jobs:
           python3 -m unittest discover -s scripts/tests -p 'test_cx_*.py'
           git -c core.whitespace=-blank-at-eol diff --check
           test -z "$(git status --porcelain=v1 -uall)"
+      - name: Preserve compiled dependencies after test failures
+        if: always() && !cancelled() && steps.validation_cache.outcome == 'success' && steps.validation_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            codex-rs/target
+          key: ${{ steps.validation_cache.outputs.cache-primary-key }}
       - name: Publish validated source
         if: steps.base.outputs.changed == 'true'
         env:
@@ -168,12 +177,3 @@ jobs:
           name: cx-rebase-audit
           path: ${{ runner.temp }}/cx-range-diff.txt
           if-no-files-found: ignore
-      - name: Preserve compiled dependencies after test failures
-        if: always() && !cancelled() && steps.validation_cache.outcome == 'success' && steps.validation_cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            codex-rs/target
-          key: ${{ steps.validation_cache.outputs.cache-primary-key }}
