@@ -27,6 +27,7 @@ fn bundle_executable_preserves_package_layout_and_install_method() -> std::io::R
         /*current_exe*/ Some(&executable),
         /*method_override*/ None,
         /*codex_home*/ Some(home.path()),
+        /*package_root*/ None,
     );
     assert_eq!(
         context,
