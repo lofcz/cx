@@ -127,9 +127,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           OLD_HEAD: ${{ steps.base.outputs.head }}
+          CX_SYNC_SSH_KEY: ${{ secrets.CX_SYNC_SSH_KEY }}
         run: |
-          gh auth setup-git
-          git push --force-with-lease="refs/heads/main:$OLD_HEAD" origin HEAD:main
+          set -euo pipefail
+          key="$RUNNER_TEMP/cx-sync-key"
+          hosts="$RUNNER_TEMP/cx-github-hosts"
+          trap 'rm -f "$key" "$hosts"' EXIT
+          umask 077
+          printf '%s\n' "$CX_SYNC_SSH_KEY" > "$key"
+          gh api meta --jq '.ssh_keys[] | "github.com " + .' > "$hosts"
+          export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$hosts"
+          git push --force-with-lease="refs/heads/main:$OLD_HEAD" git@github.com:lofcz/codex-plus.git HEAD:main
       - name: Build daily binaries
         env:
           GH_TOKEN: ${{ github.token }}
