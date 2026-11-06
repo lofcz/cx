@@ -9,6 +9,72 @@ use std::fs;
 const TEST_RESOURCE_NAME: &str = "codex-test-helper";
 
 #[test]
+fn custom_package_root_owns_only_its_releases() -> std::io::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let package_root = temp.path().join("private/standalone");
+    let other_root = temp.path().join("unrelated/standalone");
+    let codex_home = temp.path().join("shared-config");
+    let release_dir = package_root.join("releases/202611060000-test-target");
+    let bin_dir = release_dir.join(BIN_DIRNAME);
+    fs::create_dir_all(&bin_dir)?;
+    fs::create_dir_all(other_root.join(RELEASES_DIRNAME))?;
+    fs::create_dir_all(&codex_home)?;
+    fs::write(release_dir.join(PACKAGE_METADATA_FILENAME), "{}")?;
+    let exe_path = bin_dir.join(if cfg!(windows) {
+        "codex++.exe"
+    } else {
+        "codex++"
+    });
+    fs::write(&exe_path, "")?;
+
+    for (root, owned) in [
+        (Some(package_root.as_path()), true),
+        (Some(other_root.as_path()), false),
+        (None, false),
+    ] {
+        let context = InstallContext::from_exe_with_codex_home(
+            false,
+            Some(&exe_path),
+            None,
+            Some(&codex_home),
+            root,
+        );
+        assert!(context.package_layout.is_some());
+        let expected = if owned {
+            InstallMethod::Standalone {
+                release_dir: AbsolutePathBuf::from_absolute_path(release_dir.canonicalize()?)?,
+                resources_dir: None,
+                platform: standalone_platform(),
+            }
+        } else {
+            InstallMethod::Other
+        };
+        assert_eq!(context.method, expected);
+    }
+    Ok(())
+}
+
+#[test]
+fn custom_package_root_does_not_require_existing_codex_home() -> std::io::Result<()> {
+    let package_root = tempfile::tempdir()?;
+    let release_dir = package_root
+        .path()
+        .join("releases/202611060000-test-target");
+    fs::create_dir_all(&release_dir)?;
+    let exe_path = release_dir.join(if cfg!(windows) { "codex.exe" } else { "codex" });
+    fs::write(&exe_path, "")?;
+    let context = InstallContext::from_exe_with_codex_home(
+        false,
+        Some(&exe_path),
+        None,
+        None,
+        Some(package_root.path()),
+    );
+    assert!(matches!(context.method, InstallMethod::Standalone { .. }));
+    Ok(())
+}
+
+#[test]
 fn code_mode_host_program_prefers_package_resource_over_legacy_binary() -> std::io::Result<()> {
     let package_dir = tempfile::tempdir()?;
     let bin_dir = package_dir.path().join(BIN_DIRNAME);
@@ -114,6 +180,7 @@ fn detects_standalone_install_from_release_layout() -> std::io::Result<()> {
         /*current_exe*/ Some(&exe_path),
         /*method_override*/ None,
         /*codex_home*/ Some(codex_home.path()),
+        /*package_root*/ None,
     );
     assert_eq!(
         context,
@@ -160,6 +227,7 @@ fn standalone_rg_falls_back_when_resources_are_missing() -> std::io::Result<()> 
         /*current_exe*/ Some(&exe_path),
         /*method_override*/ None,
         /*codex_home*/ Some(codex_home.path()),
+        /*package_root*/ None,
     );
     assert_eq!(context.rg_command(), default_rg_command());
     Ok(())
@@ -210,6 +278,7 @@ fn detects_package_layout_independently_from_install_method() -> std::io::Result
         /*current_exe*/ Some(&exe_path),
         /*method_override*/ None,
         /*codex_home*/ None,
+        /*package_root*/ None,
     );
     assert_eq!(
         context,
@@ -307,6 +376,7 @@ fn standalone_package_layout_keeps_standalone_install_method() -> std::io::Resul
         /*current_exe*/ Some(&exe_path),
         /*method_override*/ None,
         /*codex_home*/ Some(codex_home.path()),
+        /*package_root*/ None,
     );
     assert_eq!(
         context,
@@ -380,6 +450,7 @@ fn standalone_package_rg_falls_back_when_codex_path_is_missing() -> std::io::Res
         /*current_exe*/ Some(&exe_path),
         /*method_override*/ None,
         /*codex_home*/ None,
+        /*package_root*/ None,
     );
     assert_eq!(context.rg_command(), default_rg_command());
     Ok(())
@@ -406,6 +477,7 @@ fn bundled_file_lookups_ignore_directories() -> std::io::Result<()> {
         /*current_exe*/ Some(&exe_path),
         /*method_override*/ None,
         /*codex_home*/ None,
+        /*package_root*/ None,
     );
     assert_eq!(
         context.code_mode_host_program_from_exe(Some(&fallback_exe_path)),
@@ -504,6 +576,7 @@ fn brew_is_detected_on_macos_prefixes() {
         /*current_exe*/ Some(Path::new("/opt/homebrew/bin/codex")),
         /*method_override*/ None,
         /*codex_home*/ None,
+        /*package_root*/ None,
     );
     assert_eq!(
         context,
