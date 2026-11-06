@@ -41,7 +41,7 @@ fn release_repository_urls_default_and_honor_override() {
             "202608310535",
             "codex-package_SHA256SUMS"
         ),
-        "https://github.com/lofcz/codex-plus/releases/download/rust-v202608310535/codex-package_SHA256SUMS"
+        "https://cx.lofcz.dev/releases/202608310535/codex-package_SHA256SUMS"
     );
     assert_eq!(
         release_download_url(

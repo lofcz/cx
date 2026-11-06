@@ -24,8 +24,10 @@ use tempfile::TempDir;
 
 mod install;
 
+const RELEASE_BASE_URL: &str = "https://gateway.lofcz.dev/dl/cx";
+const RELEASE_REPOSITORY_ENV: &str = "CODEX_RELEASE_REPOSITORY";
 const RELEASE_REPOSITORY: &str = "lofcz/codex-plus";
-const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/lofcz/codex-plus/releases/latest";
+const LATEST_RELEASE_URL: &str = "https://gateway.lofcz.dev/dl/cx/latest.json";
 const METADATA_TIMEOUT: Duration = Duration::from_secs(30);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const MAX_CHECKSUM_MANIFEST_BYTES: u64 = 64 * 1024;
@@ -235,7 +237,11 @@ pub(crate) fn latest_release_url() -> String {
 }
 
 fn release_download_url(repository: &str, version: &str, file_name: &str) -> String {
-    format!("https://github.com/{repository}/releases/download/rust-v{version}/{file_name}")
+    if repository == RELEASE_REPOSITORY {
+        format!("{RELEASE_BASE_URL}/releases/{version}/{file_name}")
+    } else {
+        format!("https://github.com/{repository}/releases/download/rust-v{version}/{file_name}")
+    }
 }
 
 async fn latest_release_version(http: &RouteAwareClientPool, url: &str) -> Result<String> {
@@ -259,6 +265,9 @@ async fn latest_release_version(http: &RouteAwareClientPool, url: &str) -> Resul
         .tag_name
         .strip_prefix("rust-v")
         .context("latest CX release tag is not a fork release tag")?;
+    if version.len() != 12 || !version.bytes().all(|byte| byte.is_ascii_digit()) {
+        bail!("latest CX release version must be a 12-digit timestamp");
+    }
     Ok(version.to_string())
 }
 
