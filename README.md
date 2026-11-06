@@ -38,23 +38,37 @@ The command leaves the system C compiler, `cc`, available to builds.
 ### Install a published package
 
 ```shell
-curl -fsSL https://gateway.lofcz.dev/dl/cx/install-cx.sh | bash
+curl -fsSL https://cx.lofcz.dev/install.sh | bash
 cx update
 ```
 
 ```powershell
-irm https://github.com/lofcz/codex-plus/releases/latest/download/install-fork.ps1 | iex
+irm https://cx.lofcz.dev/install.ps1 | iex
 ```
 
 The Linux and macOS installer downloads a verified package from Hetzner and installs `cx` into `~/.local/bin`.
 It keeps packages under `${XDG_DATA_HOME:-$HOME/.local/share}/codex-plus/standalone`.
 Run `cx update` to download later releases without a local Rust build.
-The Windows installer retains the `codex++` command and its existing package layout.
+The Windows installer stores CX under `%LOCALAPPDATA%\CX` and adds `cx` to your PATH.
+
+Uninstall on Linux or macOS:
+
+```shell
+curl -fsSL https://cx.lofcz.dev/uninstall.sh | bash
+```
+
+Uninstall on Windows:
+
+```powershell
+irm https://cx.lofcz.dev/uninstall.ps1 | iex
+```
+
+Uninstalling CX preserves Codex configuration, authentication, and sessions.
 
 Environment variables:
 - `CX_INSTALL_DIR` - change the Linux or macOS command directory
 - `XDG_DATA_HOME` - change the Linux or macOS package storage root
-- `CODEX_INSTALL_DIR` and `CODEX_BIN_NAME` - configure the Windows installer
+- `CX_INSTALL_ROOT` - change the Windows installation directory
 
 ### Build from source
 
