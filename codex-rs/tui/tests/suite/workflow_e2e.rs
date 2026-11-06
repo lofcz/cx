@@ -446,7 +446,7 @@ impl PtyCodex {
 
     fn wait_for_startup(&mut self) -> Result<()> {
         self.wait_for("Codex startup", STARTUP_TIMEOUT, |terminal| {
-            terminal.screen_contains("OpenAI Codex")
+            terminal.screen_contains(">_ CX")
         })
     }
 

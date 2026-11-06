@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install the published CX package without a local Rust build.
 set -euo pipefail
-cx_base="${CX_RELEASE_BASE_URL:-https://gateway.lofcz.dev/dl/cx}"
+cx_base="${CX_RELEASE_BASE_URL:-https://cx.lofcz.dev}"
 cx_root="${XDG_DATA_HOME:-$HOME/.local/share}/codex-plus"
 cx_bin_dir="${CX_INSTALL_DIR:-$HOME/.local/bin}"
 cx_version="${1:-latest}"
