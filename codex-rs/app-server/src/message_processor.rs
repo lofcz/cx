@@ -659,8 +659,11 @@ impl MessageProcessor {
             Arc::clone(&config),
             config_manager,
         );
-        let workflow_processor =
-            WorkflowRequestProcessor::new(workflow_service, config.codex_home.clone());
+        let workflow_processor = WorkflowRequestProcessor::new(
+            workflow_service,
+            Arc::clone(&config),
+            Arc::clone(&thread_manager),
+        );
 
         Self {
             turn_admission,
@@ -1855,6 +1858,15 @@ impl MessageProcessor {
                 self.catalog_processor
                     .experimental_feature_list(params)
                     .await
+            }
+            ClientRequest::WorkflowDefinitionList { params, .. } => {
+                self.workflow_processor.definition_list(params).await
+            }
+            ClientRequest::WorkflowDefinitionRead { params, .. } => {
+                self.workflow_processor.definition_read(params).await
+            }
+            ClientRequest::WorkflowDefinitionDelete { params, .. } => {
+                self.workflow_processor.definition_delete(params).await
             }
             ClientRequest::WorkflowList { params, .. } => {
                 self.workflow_processor.list(params).await
