@@ -1,8 +1,8 @@
-//! Optional, bounded recovery from provider overload errors.
+//! Default-enabled, bounded recovery from provider overload errors.
 
 use super::*;
 
-const RETRY_SECONDS: [u64; 5] = [15, 30, 60, 120, 240];
+const RETRY_SECONDS: [u64; 15] = [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 20, 40, 80, 160, 240];
 
 #[derive(Default)]
 pub(super) struct OverloadRecovery {
@@ -69,13 +69,53 @@ impl ChatWidget {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::chatwidget::tests::make_chatwidget_manual_with_sender;
+
+    #[tokio::test]
+    async fn codext_overload_recovery_waits_ten_seconds_ten_times_before_backoff() {
+        let (mut chat, _, mut events, _) = make_chatwidget_manual_with_sender().await;
+        assert!(chat.local_settings.tui.server_overloaded_resume);
+        tokio::time::pause();
+        for seconds in [10_u64; 10].into_iter().chain([20, 40, 80, 160, 240]) {
+            chat.schedule_overload_recovery();
+            let expected_token = chat.overload_recovery.token.unwrap();
+            while events.try_recv().is_ok() {}
+            tokio::task::yield_now().await;
+            tokio::time::advance(Duration::from_millis(seconds * 1000 - 1)).await;
+            tokio::task::yield_now().await;
+            while let Ok(event) = events.try_recv() {
+                assert!(!matches!(event, AppEvent::ServerOverloadedRetry { .. }));
+            }
+            tokio::time::advance(Duration::from_millis(1)).await;
+            tokio::task::yield_now().await;
+            let mut retry_token = None;
+            while let Ok(event) = events.try_recv() {
+                if let AppEvent::ServerOverloadedRetry { token } = event {
+                    assert!(retry_token.replace(token).is_none());
+                }
+            }
+            assert_eq!(retry_token, Some(expected_token));
+            chat.on_server_overloaded_retry(expected_token);
+            assert!(chat.take_overload_resume());
+        }
+        chat.schedule_overload_recovery();
+        assert!(!chat.overload_recovery.pending());
+    }
+
+    #[tokio::test]
+    async fn codext_overload_recovery_respects_explicit_disable() {
+        let (mut chat, _, _, _) = make_chatwidget_manual_with_sender().await;
+        chat.local_settings.tui.server_overloaded_resume = false;
+        chat.schedule_overload_recovery();
+        assert!(!chat.overload_recovery.pending());
+    }
 
     #[tokio::test]
     async fn codext_overload_recovery_is_bounded_and_cancelable() {
         let (mut chat, _, _, _) = make_chatwidget_manual_with_sender().await;
         chat.local_settings.tui.server_overloaded_resume = true;
-        for _ in 0..5 {
+        for _ in 0..15 {
             chat.schedule_overload_recovery();
             assert!(chat.overload_recovery.waiting());
         }

@@ -12,5 +12,4 @@ for cx_arg in "$@"; do
   esac
 done
 exec "$CODEX_INSTALL_DIR/$CODEX_BIN_NAME" "${cx_server[@]}" \
-  -c tui.status_header=false \
-  -c tui.server_overloaded_resume=true "$@"
+  -c tui.status_header=false "$@"

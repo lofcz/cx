@@ -18,14 +18,15 @@ Both projects use the Apache-2.0 license. Their existing license and notices rem
   The launcher disables the extra header above the prompt.
 - The startup title displays **CX**. A dotted, rotating 3D CX mark appears while the prompt is empty.
   Typing pauses the animation. The reduced-motion setting also pauses it.
-- Enable `tui.server_overloaded_resume` to resume overloaded turns after 15, 30, 60, 120, and 240 seconds.
+- `tui.server_overloaded_resume` is enabled by default. Recovery retries ten times at 10-second intervals.
+  Further retries wait 20, 40, 80, 160, and 240 seconds, then stop.
   Recovery sends a queued follow-up first, or `Continue` when the queue is empty.
   **Ctrl+C**, manual submission, interruption, and session replacement cancel pending recovery.
   Manual pauses and uncertain delivery continue to block automatic submission.
 - ChatGPT usage-limit failures preserve queued messages. A complete account quota refresh releases the quota hold when capacity returns.
   Empty snapshots and unrelated model quotas do not release the hold. Manual pauses remain active.
 
-The local launcher enables overload recovery and disables the extra status header.
+Overload recovery is enabled without a launcher override. The local launcher disables the extra status header.
 You can override these settings with `-c tui.server_overloaded_resume=false` or `-c tui.status_header=true`.
 Existing authentication, models, and session storage work without migration.
 Codex++ workflow orchestration and provider support remain available.
@@ -53,7 +54,7 @@ Run `functions --erase cc` in existing Fish sessions to unload the previous func
 Run these commands from `codex-rs`:
 
 ```sh
-export RUST_MIN_STACK=8388608
+export RUST_MIN_STACK=16777216
 cargo fmt --all --check
 cargo test --locked -p codex-tui --lib cc_
 cargo test --locked -p codex-tui --lib codext_

@@ -5698,8 +5698,8 @@
           "type": "boolean"
         },
         "server_overloaded_resume": {
-          "default": false,
-          "description": "Resume overloaded turns with bounded exponential backoff.",
+          "default": true,
+          "description": "Resume overloaded turns by default: ten retries at 10 seconds, then bounded exponential backoff.",
           "type": "boolean"
         },
         "session_picker_view": {

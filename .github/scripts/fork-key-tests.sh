@@ -4,15 +4,19 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT/codex-rs"
 
+# Upstream's resume-picker transcript test already needs nearly all of the 8 MiB
+# test-thread stack. CX's added config fields tip it over, so give fork tests headroom.
+MIN_STACK="${RUST_MIN_STACK:-16777216}"
+
 cargo fmt --check
 cargo check --locked --workspace --lib --bins
 
 # Workflow is a large fork-only surface, so run both crates' complete test suites.
-just test -p codex-workflow -p codex-workflow-extension
+just rust_min_stack="$MIN_STACK" test -p codex-workflow -p codex-workflow-extension
 
 # Fork-only provider and protocol surfaces. These crates are small enough to
 # run completely instead of maintaining a fragile list of individual tests.
-just test \
+just rust_min_stack="$MIN_STACK" test \
   -p codex-api \
   -p codex-protocol \
   -p codex-code-mode-runtime \
@@ -23,18 +27,18 @@ just test \
   -p codex-tools
 
 # CX stores binaries separately from shared authentication and session files.
-just test -p codex-install-context
+just rust_min_stack="$MIN_STACK" test -p codex-install-context
 
 # The app-server protocol and daemon package layout changed in this fork.
-just test -p codex-app-server-protocol -p codex-app-server-daemon
+just rust_min_stack="$MIN_STACK" test -p codex-app-server-protocol -p codex-app-server-daemon
 
 # Keep app-server workflow/transport coverage at the lib level; integration
 # tests that spawn the binary are covered by their dedicated CI suites.
-just test -p codex-app-server --lib \
+just rust_min_stack="$MIN_STACK" test -p codex-app-server --lib \
   -E 'test(workflow_events) | test(transport)'
 
 # Keep the legacy wire/updater/UI spot checks that are not covered above.
-just test \
+just rust_min_stack="$MIN_STACK" test \
   -p codex-cli \
   -p codex-core \
   -p codex-tui \
@@ -44,6 +48,7 @@ just test \
     (package(codex-core) & test(config_schema_matches_fixture)) |
     (package(codex-core) & test(exec_command_enforces_bash_command_clamp_before_execution)) |
     (package(codex-core) & test(exec_command_clamp_forces_a_non_login_default_shell)) |
+    (package(codex-core) & test(cx_overload_recovery_defaults_and_cli_overrides)) |
     (package(codex-core) & test(fresh_workflow_subagent_persists_ownership_edge_and_close_status)) |
     (package(codex-core) & test(chat_wire_api_posts_to_chat_completions_and_merges_extra_body)) |
     (package(codex-core) & test(anthropic_wire_api_posts_to_messages_and_merges_extra_body)) |
