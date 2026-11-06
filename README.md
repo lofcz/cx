@@ -104,22 +104,42 @@ Yes, it types when you type. Run `/pets`, choose **Bongo Cat**, and your new pai
 
 ## Dynamic workflows
 
-Workflows are enabled by default. Explicitly ask Codex to run a workflow when a task benefits from parallel research, independent verification, or more context than one agent can hold:
+Workflows are enabled by default. Open `/workflow` to create, edit, delete, or run a workflow.
+The library includes `code-review`, `deep-research`, and your saved workflows.
 
 ```text
-Run the deep-research workflow on the current state of local-first AI coding tools.
-Run a high-effort code-review workflow on the current branch.
+/workflow code-review
+/workflow code-review max main
+/workflow deep-research compare local-first AI coding tools
+/workflow create review changes, verify findings, then summarize the confirmed bugs
+/workflow edit code-review focus on security and skip style issues
+/workflow delete my-review
 ```
 
-CX includes `deep-research` and `code-review` workflows. It also discovers saved `.js` workflows from active plugins, `$CODEX_HOME/workflows`, and personal Claude workflows: `CLAUDE_CONFIG_DIR/workflows` when `CLAUDE_CONFIG_DIR` is set, otherwise `~/.claude/workflows`. Project discovery checks `.codex/workflows` and `.claude/workflows` at every directory from the current working directory up to the filesystem root. Saved workflows override bundled and plugin workflows. Project workflows take priority over personal ones; within the same directory, `.codex/workflows` wins over `.claude/workflows`; and the closest project directory to the current working directory wins. Only `.js` files are accepted. Workflow scripts can compose `agent()`, `pipeline()`, and `parallel()` calls, validate structured results with JSON Schema, and isolate mutating agents in temporary Git worktrees.
+`/workflow code-review` starts a high-effort review with the default target.
+Use **Run with instructions** to describe a different target or task.
+**Create workflow** and **Edit** accept plain language. CX writes the saved workflow through its normal file tools.
+**Describe a change** accepts other workflow requests in plain language.
 
-Runs continue in the background after launch. Open `/workflows` in the TUI to inspect phases and agents, stop a run, or skip and retry individual agents. For command-line use and quick validation:
+Saved `.js` workflows come from `$CODEX_HOME/workflows` (normally `~/.codex/workflows`),
+ancestor `.codex/workflows` directories, and active plugins.
+Project definitions override personal definitions, which override built-in definitions.
+Editing a built-in creates a personal version. Editing a plugin creates a separate personal copy.
+Delete moves a saved definition into its directory's `.trash` folder. Any inherited version becomes available again.
+Built-in and plugin originals remain read-only.
+The library uses the app-server host filesystem. Separate remote execution environments still require inline workflow scripts.
+
+Workflow scripts support parallel agents, structured results, temporary Git worktrees, retries, and resumable runs.
+Runs use the existing owning-thread workflow engine and its approval settings.
+Open **View runs**, `/workflow runs`, or `/workflows` to inspect progress, stop a run, or skip and retry agents.
+
+Saved workflows are discovered from active plugins, `$CODEX_HOME/workflows`, and personal Claude workflows: `CLAUDE_CONFIG_DIR/workflows` when `CLAUDE_CONFIG_DIR` is set, otherwise `~/.claude/workflows`. Project discovery checks `.codex/workflows` and `.claude/workflows` at every directory from the current working directory up to the filesystem root. Only `.js` files are accepted. For command-line use and quick validation:
 
 ```bash
-codex++ workflow run review-changes --args '{"path":"src"}'
-codex++ workflow run ./.claude/workflows/review-changes.js
-codex++ workflow run review-changes --resume wf_abc123
-codex++ workflow validate ./.claude/workflows/review-changes.js --json
+cx workflow run review-changes --args '{"path":"src"}'
+cx workflow run ./.claude/workflows/review-changes.js
+cx workflow run review-changes --resume wf_abc123
+cx workflow validate ./.claude/workflows/review-changes.js --json
 ```
 
 `workflow run` launches a normal `codex exec` turn that calls the existing `Workflow` tool and waits for the terminal result, then verifies the newest local workflow snapshot and exits non-zero unless the run completed. Omit `--args` to leave the script's `args` global `undefined`, or pass `--args null` for an explicit null. `--resume` continues an existing run and, without `--args`, restores the original arguments and their presence. `workflow validate` parses and validates the root script locally without a model call; saved child workflows are resolved and frozen when the root workflow is launched. For concurrent CI jobs, give each invocation a distinct `CODEX_HOME` so snapshot verification cannot observe another job's run. `workflow run` still follows the thread's approval and automatic-review policy; non-interactive workers must configure approval appropriately, or pass the root bypass flag only when that is acceptable.
