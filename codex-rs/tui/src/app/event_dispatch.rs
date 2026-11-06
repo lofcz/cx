@@ -1671,6 +1671,67 @@ impl App {
             AppEvent::FetchHooksList { target } => {
                 self.fetch_hooks_list(app_server, target);
             }
+            AppEvent::OpenWorkflowManager { thread_id, command } => {
+                if thread_id.is_some() && thread_id != self.chat_widget.thread_id() {
+                    return Ok(AppRunControl::Continue);
+                }
+                let params = codex_app_server_protocol::WorkflowDefinitionListParams {
+                    thread_id: self.chat_widget.thread_id().map(|id| id.to_string()),
+                };
+                match app_server.workflow_definition_list(params).await {
+                    Ok(response) => self.chat_widget.handle_workflow_manager_command(response, &command),
+                    Err(err) => self.chat_widget.add_error_message(format!(
+                        "Failed to load workflow library: {err}"
+                    )),
+                }
+            }
+            AppEvent::ReadWorkflowDefinition { thread_id, name, action } => {
+                if thread_id.is_some() && thread_id != self.chat_widget.thread_id() {
+                    return Ok(AppRunControl::Continue);
+                }
+                let params = codex_app_server_protocol::WorkflowDefinitionReadParams {
+                    thread_id: self.chat_widget.thread_id().map(|id| id.to_string()),
+                    name,
+                };
+                match app_server.workflow_definition_read(params).await {
+                    Ok(response) => self.chat_widget.handle_workflow_definition(response, action),
+                    Err(err) => self.chat_widget.add_error_message(format!(
+                        "Failed to read workflow: {err}"
+                    )),
+                }
+            }
+            AppEvent::DeleteWorkflowDefinition { thread_id, definition } => {
+                if thread_id.is_some() && thread_id != self.chat_widget.thread_id() {
+                    return Ok(AppRunControl::Continue);
+                }
+                let name = definition.definition.name;
+                let params = codex_app_server_protocol::WorkflowDefinitionDeleteParams {
+                    thread_id: self.chat_widget.thread_id().map(|id| id.to_string()),
+                    name: name.clone(),
+                    expected_path: definition.definition.path.unwrap_or_default(),
+                    sha256: definition.sha256,
+                };
+                match app_server.workflow_definition_delete(params).await {
+                    Ok(_) => {
+                        self.chat_widget.add_info_message(
+                            format!("Deleted workflow: {name}. Any inherited version is available again."),
+                            None,
+                        );
+                        self.app_event_tx.send(AppEvent::OpenWorkflowManager {
+                            thread_id,
+                            command: String::new(),
+                        });
+                    }
+                    Err(err) => self.chat_widget.add_error_message(format!(
+                        "Failed to delete workflow: {err}"
+                    )),
+                }
+            }
+            AppEvent::SubmitWorkflowRequest { thread_id, request, context } => {
+                if thread_id.is_none() || thread_id == self.chat_widget.thread_id() {
+                    self.chat_widget.submit_workflow_request(request, context);
+                }
+            }
             AppEvent::OpenWorkflows => {
                 let Some(thread_id) = self.chat_widget.thread_id() else {
                     self.chat_widget.add_info_message(

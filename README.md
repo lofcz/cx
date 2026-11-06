@@ -104,16 +104,34 @@ Yes, it types when you type. Run `/pets`, choose **Bongo Cat**, and your new pai
 
 ## Dynamic workflows
 
-Workflows are enabled by default. Explicitly ask Codex to run a workflow when a task benefits from parallel research, independent verification, or more context than one agent can hold:
+Workflows are enabled by default. Open `/workflow` to create, edit, delete, or run a workflow.
+The library includes `code-review`, `deep-research`, and your saved workflows.
 
 ```text
-Run the deep-research workflow on the current state of local-first AI coding tools.
-Run a high-effort code-review workflow on the current branch.
+/workflow code-review
+/workflow code-review max main
+/workflow deep-research compare local-first AI coding tools
+/workflow create review changes, verify findings, then summarize the confirmed bugs
+/workflow edit code-review focus on security and skip style issues
+/workflow delete my-review
 ```
 
-CX includes `deep-research` and `code-review` workflows. It can also discover saved `.js` workflows from `~/.codex/workflows`, project-level `.codex/workflows` and `.claude/workflows` directories, and active plugins. Workflow scripts can compose `agent()`, `pipeline()`, and `parallel()` calls, validate structured results with JSON Schema, and isolate mutating agents in temporary Git worktrees.
+`/workflow code-review` starts a high-effort review with the default target.
+Use **Run with instructions** to describe a different target or task.
+**Create workflow** and **Edit** accept plain language. CX writes the saved workflow through its normal file tools.
+**Describe a change** accepts other workflow requests in plain language.
 
-Runs continue in the background after launch. Open `/workflows` in the TUI to inspect phases and agents, stop a run, or skip and retry individual agents.
+Saved `.js` workflows come from `$CODEX_HOME/workflows` (normally `~/.codex/workflows`),
+ancestor `.codex/workflows` directories, and active plugins.
+Project definitions override personal definitions, which override built-in definitions.
+Editing a built-in creates a personal version. Editing a plugin creates a separate personal copy.
+Delete moves a saved definition into its directory's `.trash` folder. Any inherited version becomes available again.
+Built-in and plugin originals remain read-only.
+The library uses the app-server host filesystem. Separate remote execution environments still require inline workflow scripts.
+
+Workflow scripts support parallel agents, structured results, temporary Git worktrees, retries, and resumable runs.
+Runs use the existing owning-thread workflow engine and its approval settings.
+Open **View runs**, `/workflow runs`, or `/workflows` to inspect progress, stop a run, or skip and retry agents.
 
 Workflow agents default to a CPU-derived per-run limit.
 

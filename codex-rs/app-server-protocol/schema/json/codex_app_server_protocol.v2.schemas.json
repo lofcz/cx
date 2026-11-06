@@ -26469,6 +26469,45 @@
       "title": "WorkflowCompletedNotification",
       "type": "object"
     },
+    "WorkflowDefinition": {
+      "properties": {
+        "deletable": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "editable": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "deletable",
+        "description",
+        "editable",
+        "name",
+        "origin"
+      ],
+      "type": "object"
+    },
     "WorkflowIsolation": {
       "enum": [
         "worktree",

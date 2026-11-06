@@ -416,6 +416,7 @@ mod turn_runtime;
 use self::turn_lifecycle::TurnLifecycleState;
 mod usage;
 mod user_messages;
+mod workflow_manager;
 mod workflows;
 mod working_directory;
 use self::user_messages::MessageDelivery;

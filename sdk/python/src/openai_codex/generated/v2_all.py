@@ -7304,6 +7304,19 @@ class WorkflowAgentState(Enum):
     error = "error"
 
 
+class WorkflowDefinition(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    deletable: bool
+    description: str
+    editable: bool
+    error: str | None = None
+    name: str
+    origin: str
+    path: str | None = None
+
+
 class WorkflowIsolation(Enum):
     worktree = "worktree"
     remote = "remote"

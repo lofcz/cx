@@ -118,8 +118,8 @@ impl WorkflowOrigin {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PluginWorkflowRoot {
-    namespace: String,
-    workflows_dir: AbsolutePathBuf,
+    pub(crate) namespace: String,
+    pub(crate) workflows_dir: AbsolutePathBuf,
 }
 
 pub(crate) async fn active_plugin_workflow_roots(

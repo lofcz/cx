@@ -239,3 +239,71 @@ pub struct WorkflowCompletedNotification {
 #[cfg(test)]
 #[path = "workflow_tests.rs"]
 mod tests;
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct WorkflowDefinitionListParams {
+    #[ts(optional = nullable)]
+    pub thread_id: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct WorkflowDefinition {
+    pub name: String,
+    pub description: String,
+    pub origin: String,
+    pub path: Option<String>,
+    pub editable: bool,
+    pub deletable: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct WorkflowDefinitionListResponse {
+    pub data: Vec<WorkflowDefinition>,
+    pub personal_directory: String,
+    pub authoring_guide: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct WorkflowDefinitionReadParams {
+    #[ts(optional = nullable)]
+    pub thread_id: Option<String>,
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct WorkflowDefinitionReadResponse {
+    pub definition: WorkflowDefinition,
+    pub source: String,
+    pub sha256: String,
+    pub edit_path: String,
+    pub authoring_guide: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct WorkflowDefinitionDeleteParams {
+    #[ts(optional = nullable)]
+    pub thread_id: Option<String>,
+    pub name: String,
+    pub expected_path: String,
+    pub sha256: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct WorkflowDefinitionDeleteResponse {
+    pub deleted: bool,
+}

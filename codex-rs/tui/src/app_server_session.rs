@@ -2199,6 +2199,39 @@ impl AppServerSession {
             .wrap_err("skills/list failed in TUI")
     }
 
+    pub(crate) async fn workflow_definition_list(
+        &mut self,
+        params: codex_app_server_protocol::WorkflowDefinitionListParams,
+    ) -> Result<codex_app_server_protocol::WorkflowDefinitionListResponse> {
+        let request_id = self.next_request_id();
+        self.request_handle
+            .request_typed(ClientRequest::WorkflowDefinitionList { request_id, params })
+            .await
+            .wrap_err("workflowDefinition/list failed in TUI")
+    }
+
+    pub(crate) async fn workflow_definition_read(
+        &mut self,
+        params: codex_app_server_protocol::WorkflowDefinitionReadParams,
+    ) -> Result<codex_app_server_protocol::WorkflowDefinitionReadResponse> {
+        let request_id = self.next_request_id();
+        self.request_handle
+            .request_typed(ClientRequest::WorkflowDefinitionRead { request_id, params })
+            .await
+            .wrap_err("workflowDefinition/read failed in TUI")
+    }
+
+    pub(crate) async fn workflow_definition_delete(
+        &mut self,
+        params: codex_app_server_protocol::WorkflowDefinitionDeleteParams,
+    ) -> Result<codex_app_server_protocol::WorkflowDefinitionDeleteResponse> {
+        let request_id = self.next_request_id();
+        self.request_handle
+            .request_typed(ClientRequest::WorkflowDefinitionDelete { request_id, params })
+            .await
+            .wrap_err("workflowDefinition/delete failed in TUI")
+    }
+
     pub(crate) async fn workflow_list(
         &mut self,
         thread_id: ThreadId,
