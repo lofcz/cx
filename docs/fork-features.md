@@ -82,18 +82,23 @@ Release publication requires successful builds, regression checks, and installer
 The CursorPlusPlus `Publish CX binaries to Hetzner` workflow checks for releases hourly at minute 43.
 It uses that repository's existing SSH secrets and verifies uploaded checksums.
 It publishes release directories before replacing the latest-version manifest.
-The server keeps seven releases under `https://gateway.lofcz.dev/dl/cx/releases/`.
+The server keeps seven releases under `https://cx.lofcz.dev/releases/`.
 
 Install or migrate a local source build with:
 
 ```sh
-curl -fsSL https://gateway.lofcz.dev/dl/cx/install-cx.sh | bash
+curl -fsSL https://cx.lofcz.dev/install.sh | bash
 ```
 
 Then run `cx update` whenever you want the latest published package.
 It preserves Codex configuration, authentication, and sessions.
 The native updater and update notice use the Hetzner channel.
 GitHub Releases retain the original build artifacts and source commit.
+
+Windows uses `irm https://cx.lofcz.dev/install.ps1 | iex` and exposes the same `cx` command.
+Uninstall with `curl -fsSL https://cx.lofcz.dev/uninstall.sh | bash` on Linux or macOS.
+On Windows, use `irm https://cx.lofcz.dev/uninstall.ps1 | iex`.
+Both commands keep existing Codex configuration, authentication, and sessions.
 
 ### Manual source sync
 
