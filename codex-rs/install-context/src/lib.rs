@@ -88,11 +88,13 @@ impl InstallContext {
         method_override: Option<InstallMethod>,
     ) -> Self {
         let codex_home = codex_utils_home_dir::find_codex_home().ok();
+        let package_root = std::env::var_os("CODEX_PACKAGE_ROOT").map(PathBuf::from);
         Self::from_exe_with_codex_home(
             is_macos,
             current_exe,
             method_override,
             codex_home.as_deref(),
+            package_root.as_deref(),
         )
     }
 
@@ -101,12 +103,19 @@ impl InstallContext {
         current_exe: Option<&Path>,
         method_override: Option<InstallMethod>,
         codex_home: Option<&Path>,
+        package_root: Option<&Path>,
     ) -> Self {
         let package_layout = current_exe.and_then(CodexPackageLayout::from_exe);
         let method = if let Some(method) = method_override {
             method
         } else if let Some(exe_path) = current_exe {
-            install_method_from_exe(exe_path, codex_home, package_layout.as_ref(), is_macos)
+            install_method_from_exe(
+                exe_path,
+                codex_home,
+                package_root,
+                package_layout.as_ref(),
+                is_macos,
+            )
         } else {
             InstallMethod::Other
         };
@@ -291,10 +300,12 @@ impl CodexPackageLayout {
 fn install_method_from_exe(
     exe_path: &Path,
     codex_home: Option<&Path>,
+    package_root: Option<&Path>,
     package_layout: Option<&CodexPackageLayout>,
     is_macos: bool,
 ) -> InstallMethod {
-    if let Some(standalone_method) = standalone_install_method(exe_path, codex_home, package_layout)
+    if let Some(standalone_method) =
+        standalone_install_method(exe_path, codex_home, package_root, package_layout)
     {
         return standalone_method;
     }
@@ -309,18 +320,23 @@ fn install_method_from_exe(
 fn standalone_install_method(
     exe_path: &Path,
     codex_home: Option<&Path>,
+    package_root: Option<&Path>,
     package_layout: Option<&CodexPackageLayout>,
 ) -> Option<InstallMethod> {
-    let canonical_codex_home = canonical_absolute_path(codex_home?)?;
     let release_dir = if let Some(package_layout) = package_layout {
         package_layout.package_dir.clone()
     } else {
         canonical_absolute_path(exe_path)?.parent()?
     };
-    let releases_root = canonical_codex_home
-        .join("packages")
-        .join(STANDALONE_PACKAGES_DIRNAME)
-        .join(RELEASES_DIRNAME);
+    // The installer can own packages outside CODEX_HOME while sharing its sessions.
+    let releases_root = if let Some(package_root) = package_root {
+        canonical_absolute_path(&package_root.join(RELEASES_DIRNAME))?
+    } else {
+        canonical_absolute_path(codex_home?)?
+            .join("packages")
+            .join(STANDALONE_PACKAGES_DIRNAME)
+            .join(RELEASES_DIRNAME)
+    };
     if !release_dir.starts_with(releases_root.as_path()) {
         return None;
     }
