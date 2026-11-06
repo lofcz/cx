@@ -77,6 +77,8 @@ just rust_min_stack="$MIN_STACK" test \
     (package(codex-core) & test(steer_waits_for_non_native_sse_response_to_complete)) |
     (package(codex-core) & test(multi_agent_config_precedence_overrides_remote_model_selector)) |
     (package(codex-core) & test(claude_file_tools_require_read_track_edits_and_reject_external_changes)) |
+    (package(codex-tui) & test(workflow)) |
+    (package(codex-tui) & test(slash_command::tests)) |
     (package(codex-tui) & test(cc_)) |
     (package(codex-tui) & test(keymap)) |
     (package(codex-tui) & test(empty_state_animation)) |
