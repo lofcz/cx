@@ -13,6 +13,7 @@ if [ "$DAEMON_ONLY" = "1" ]; then
 else
   PACKAGE_ROOT="$CODEX_HOME_DIR/packages/standalone"
 fi
+PACKAGE_ROOT="${CODEX_PACKAGE_ROOT:-$PACKAGE_ROOT}"
 RELEASES_DIR="$PACKAGE_ROOT/releases"
 CURRENT_LINK="$PACKAGE_ROOT/current"
 AUTO_UPDATE_VERSION="$PACKAGE_ROOT/auto-update-version"
