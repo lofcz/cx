@@ -131,10 +131,27 @@ jobs:
           gh auth setup-git
           git push --force-with-lease="refs/heads/main:$OLD_HEAD" origin HEAD:main
       - name: Build daily binaries
-        if: steps.base.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run fork-release.yml --repo lofcz/codex-plus --ref main
+        run: |
+          set -euo pipefail
+          # Retry a failed release even if the parent has no newer commits.
+          head="$(git rev-parse HEAD)"
+          tag="$(gh release view --repo lofcz/codex-plus --json tagName --jq .tagName 2>/dev/null || true)"
+          released=""
+          if [[ -n "$tag" ]]; then
+            released="$(git ls-remote origin "refs/tags/$tag" | cut -f1)"
+          fi
+          if [[ "$released" == "$head" ]]; then
+            echo 'This source commit already has a published release.'
+            exit 0
+          fi
+          active="$(gh run list --repo lofcz/codex-plus --workflow fork-release.yml --limit 10 --json headSha,status --jq ".[] | select(.headSha == \"$head\" and .status != \"completed\") | .status")"
+          if [[ -n "$active" ]]; then
+            echo 'This source commit already has a running release build.'
+            exit 0
+          fi
+          gh workflow run fork-release.yml --repo lofcz/codex-plus --ref main
       - name: Save rebase audit
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
