@@ -1,5 +1,6 @@
 //! Interactive workflow definitions; runs retain the owning turn's Workflow tool lifecycle.
 
+use super::user_messages::UserMessageHistoryOverride;
 use super::*;
 use crate::app_event::WorkflowDefinitionAction;
 use codex_app_server_protocol::WorkflowDefinition;
