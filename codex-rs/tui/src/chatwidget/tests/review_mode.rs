@@ -374,6 +374,9 @@ async fn failed_turn_completion_preserves_queued_review_start() {
         Vec::new(),
     ));
     handle_error(&mut chat, ERROR, Some(CodexErrorInfo::ServerOverloaded));
+    assert!(chat.overload_recovery.waiting());
+    assert!(op_rx.try_recv().is_err());
+    chat.on_server_overloaded_retry(chat.overload_recovery.token.unwrap());
     assert_matches!(op_rx.try_recv(), Ok(Op::Review { .. }));
     assert!(chat.input_queue.user_turn_pending_start);
     assert!(chat.bottom_pane.is_task_running());

@@ -67,6 +67,8 @@ just rust_min_stack="$MIN_STACK" test \
     (package(codex-tui) & test(startup_draft)) |
     (package(codex-tui) & test(usage_notice)) |
     (package(codex-tui) & test(codext_)) |
+    (package(codex-tui) & test(server_overloaded)) |
+    (package(codex-tui) & test(failed_turn_completion_preserves_queued_review_start)) |
     (package(codex-tui) & test(resume_picker)) |
     (package(codex-tui) & test(rate_limit_recovery)) |
     (package(codex-tui) & test(side_model)) |
