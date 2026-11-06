@@ -24,8 +24,8 @@ use tempfile::TempDir;
 
 mod install;
 
-const RELEASE_REPOSITORY: &str = "lofcz/codex-plus";
-const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/lofcz/codex-plus/releases/latest";
+const RELEASE_BASE_URL: &str = "https://gateway.lofcz.dev/dl/cx";
+const LATEST_RELEASE_URL: &str = "https://gateway.lofcz.dev/dl/cx/latest.json";
 const METADATA_TIMEOUT: Duration = Duration::from_secs(30);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const MAX_CHECKSUM_MANIFEST_BYTES: u64 = 64 * 1024;
@@ -77,12 +77,8 @@ pub(crate) async fn run(action: UpdateAction) -> Result<UpdateOutcome> {
     }
 
     println!("Downloading CX {version} for {target}...");
-    let checksums_url = format!(
-        "https://github.com/{RELEASE_REPOSITORY}/releases/download/rust-v{version}/codex-package_SHA256SUMS"
-    );
-    let archive_url = format!(
-        "https://github.com/{RELEASE_REPOSITORY}/releases/download/rust-v{version}/{asset}"
-    );
+    let checksums_url = format!("{RELEASE_BASE_URL}/releases/{version}/codex-package_SHA256SUMS");
+    let archive_url = format!("{RELEASE_BASE_URL}/releases/{version}/{asset}");
     let checksum_manifest = fetch_checksum_manifest(&http, &checksums_url).await?;
     let expected_checksum = checksum_for_asset(&checksum_manifest, &asset)?;
 
@@ -234,6 +230,9 @@ async fn latest_release_version(http: &RouteAwareClientPool) -> Result<String> {
         .tag_name
         .strip_prefix("rust-v")
         .context("latest CX release tag is not a fork release tag")?;
+    if version.len() != 12 || !version.bytes().all(|byte| byte.is_ascii_digit()) {
+        bail!("latest CX release version must be a 12-digit timestamp");
+    }
     Ok(version.to_string())
 }
 
