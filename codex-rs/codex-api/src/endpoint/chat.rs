@@ -910,9 +910,7 @@ fn standalone_function_output_to_chat_content(
         .unwrap_or("untrusted_content");
     let items = match output {
         FunctionCallOutputBody::Text(content) => {
-            return ChatContent::Text(format!(
-                "<external_{name}>\n{content}\n</external_{name}>"
-            ));
+            return ChatContent::Text(format!("<external_{name}>\n{content}\n</external_{name}>"));
         }
         FunctionCallOutputBody::ContentItems(items) => items,
     };
