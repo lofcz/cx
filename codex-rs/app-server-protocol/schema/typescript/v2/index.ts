@@ -688,6 +688,7 @@ export type { WorkflowAgentActivity } from "./WorkflowAgentActivity";
 export type { WorkflowAgentProgress } from "./WorkflowAgentProgress";
 export type { WorkflowAgentState } from "./WorkflowAgentState";
 export type { WorkflowCompletedNotification } from "./WorkflowCompletedNotification";
+export type { WorkflowDefinition } from "./WorkflowDefinition";
 export type { WorkflowIsolation } from "./WorkflowIsolation";
 export type { WorkflowProgressItem } from "./WorkflowProgressItem";
 export type { WorkflowProgressKind } from "./WorkflowProgressKind";
