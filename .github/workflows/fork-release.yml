@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version in yyyymmddhhmm format. Defaults to current Asia/Shanghai time."
+        description: "Release version in yyyymmddhhmm format. Defaults to current UTC time."
         required: false
         type: string
       prerelease:
@@ -24,6 +24,45 @@ permissions:
   contents: write
 
 jobs:
+  validate:
+    name: Validate CX features
+    runs-on: ubuntu-26.04
+    timeout-minutes: 300
+    env:
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - name: Install validation dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends libcap-dev pkg-config libglib2.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libasound2-dev
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532
+        with:
+          tool: just,nextest
+      - uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: x86_64-unknown-linux-gnu
+      - uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            codex-rs/target
+          key: cx-check-${{ runner.os }}-1.95.0-${{ hashFiles('codex-rs/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            cx-check-${{ runner.os }}-1.95.0-${{ hashFiles('codex-rs/Cargo.lock') }}-
+      - name: Run fork regression checks
+        run: |
+          .github/scripts/fork-key-tests.sh
+          python3 -m unittest discover -s scripts/tests -p 'test_cx_*.py'
+
   metadata:
     name: Prepare release metadata
     runs-on: ubuntu-latest
@@ -44,7 +83,7 @@ jobs:
 
           requested_version="${{ inputs.version }}"
           if [[ -z "$requested_version" ]]; then
-            requested_version="$(TZ=Asia/Shanghai date +%Y%m%d%H%M)"
+            requested_version="$(date -u +%Y%m%d%H%M)"
           fi
 
           if [[ ! "$requested_version" =~ ^[0-9]{12}$ ]]; then
@@ -225,6 +264,19 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
+      - name: Cache release dependencies
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            .cargo-home/registry
+            .cargo-home/git
+            codex-rs/target
+          key: cx-release-${{ matrix.target }}-${{ needs.metadata.outputs.rust_channel }}-${{ hashFiles('codex-rs/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            cx-release-${{ matrix.target }}-${{ needs.metadata.outputs.rust_channel }}-${{ hashFiles('codex-rs/Cargo.lock') }}-
+
       - name: Cargo build
         shell: bash
         run: |
@@ -236,7 +288,7 @@ jobs:
           for binary in ${{ matrix.binaries }}; do
             build_args+=(--bin "$binary")
           done
-          cargo build --target ${{ matrix.target }} --release --timings "${build_args[@]}"
+          cargo build --locked --target ${{ matrix.target }} --release --timings "${build_args[@]}"
 
       - name: Build symbols archive and strip binaries
         shell: bash
@@ -310,6 +362,7 @@ jobs:
     needs:
       - metadata
       - build
+      - validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -346,6 +399,7 @@ jobs:
           sed "s#__RELEASE_REPOSITORY__#${RELEASE_REPOSITORY}#g" \
             scripts/install/install-fork.sh > dist/install-fork.sh
           chmod +x dist/install-fork.sh
+          cp scripts/install/install-cx.sh scripts/install/cx-local.sh dist/
 
       - name: Add Windows fork install script
         shell: bash
@@ -555,11 +609,12 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "Codex++ with selected Codext features."
+            echo "CX with selected Codext features."
             echo
             echo "See [fork features](https://github.com/${GITHUB_REPOSITORY}/blob/${RELEASE_TAG}/docs/fork-features.md)."
             echo
             echo "Commit: ${GITHUB_SHA}"
+            echo "Codex++ base: $(cat .codex-plus-base)"
           } > "${RUNNER_TEMP}/release-notes.md"
 
       - name: Create GitHub Release
