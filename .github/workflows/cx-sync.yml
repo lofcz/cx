@@ -1,0 +1,144 @@
+name: CX daily sync
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+concurrency:
+  group: cx-sync
+  cancel-in-progress: false
+permissions:
+  contents: write
+  actions: write
+jobs:
+  sync:
+    if: github.repository == 'lofcz/codex-plus'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 350
+    env:
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve parent and preserve validation scripts
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git remote add parent https://github.com/yuguorui/codex-plus.git
+          git fetch --no-tags parent main
+          old="$(cat .codex-plus-base)"
+          new="$(git rev-parse parent/main)"
+          git merge-base --is-ancestor "$old" HEAD
+          echo "old=$old" >> "$GITHUB_OUTPUT"
+          echo "new=$new" >> "$GITHUB_OUTPUT"
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "channel=$(sed -n 's/^channel = "\([^"]*\)"/\1/p' codex-rs/rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+          if [[ "$old" == "$new" ]]; then changed=false; else changed=true; fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          cp .github/scripts/validate-fork-rebase.sh "$RUNNER_TEMP/validate-cx.sh"
+          cp .github/scripts/cx-rebase-agent.sh "$RUNNER_TEMP/cx-rebase-agent.sh"
+      - name: Install validation dependencies
+        if: steps.base.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends libcap-dev pkg-config libglib2.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libasound2-dev
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        if: steps.base.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        with:
+          toolchain: ${{ steps.base.outputs.channel }}
+      - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532
+        if: steps.base.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        with:
+          tool: just,nextest
+      - uses: ./.github/actions/setup-rusty-v8
+        if: steps.base.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        with:
+          target: x86_64-unknown-linux-gnu
+      - uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7
+        if: steps.base.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            codex-rs/target
+          key: cx-check-${{ runner.os }}-${{ steps.base.outputs.channel }}-${{ hashFiles('codex-rs/Cargo.lock') }}-${{ steps.base.outputs.new }}
+          restore-keys: |
+            cx-check-${{ runner.os }}-${{ steps.base.outputs.channel }}-${{ hashFiles('codex-rs/Cargo.lock') }}-
+      - name: Download verified parent agent package
+        if: steps.base.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/cx-agent"
+          cd "$RUNNER_TEMP/cx-agent"
+          gh release download --repo yuguorui/codex-plus --pattern 'codex-package-x86_64-unknown-linux-musl.tar.gz' --pattern codex-package_SHA256SUMS
+          grep -E '^[a-f0-9]{64}  codex-package-x86_64-unknown-linux-musl.tar.gz$' codex-package_SHA256SUMS | sha256sum --check --strict -
+          tar -xzf codex-package-x86_64-unknown-linux-musl.tar.gz
+          ./bin/codex++ --version
+          echo "$RUNNER_TEMP/cx-agent/bin" >> "$GITHUB_PATH"
+      - name: Rebase and repair through Vercel AI Gateway
+        if: steps.base.outputs.changed == 'true'
+        timeout-minutes: 210
+        env:
+          CX_AI_GATEWAY_KEY: ${{ secrets.CX_AI_GATEWAY_KEY }}
+          CX_SYNC_MODEL: ${{ vars.CX_SYNC_MODEL }}
+          CX_OLD_BASE: ${{ steps.base.outputs.old }}
+          CX_NEW_BASE: ${{ steps.base.outputs.new }}
+          CX_PRE_REBASE: ${{ steps.base.outputs.head }}
+          GIT_EDITOR: "true"
+        run: bash "$RUNNER_TEMP/cx-rebase-agent.sh"
+      - name: Audit rebase and record parent
+        if: steps.base.outputs.changed == 'true'
+        env:
+          OLD_BASE: ${{ steps.base.outputs.old }}
+          NEW_BASE: ${{ steps.base.outputs.new }}
+          OLD_HEAD: ${{ steps.base.outputs.head }}
+        run: |
+          set -euo pipefail
+          test ! -d .git/rebase-merge
+          test ! -d .git/rebase-apply
+          test -z "$(git status --porcelain=v1 -uall)"
+          git merge-base --is-ancestor "$NEW_BASE" HEAD
+          bash "$RUNNER_TEMP/validate-cx.sh" "$OLD_BASE" "$NEW_BASE" "$OLD_HEAD"
+          git range-diff "$OLD_BASE..$OLD_HEAD" "$NEW_BASE..HEAD" > "$RUNNER_TEMP/cx-range-diff.txt"
+          printf '%s\n' "$NEW_BASE" > .codex-plus-base
+          git add .codex-plus-base
+          git commit -m "chore: sync Codex++ base to ${NEW_BASE:0:10}"
+      - name: Validate CX and parent features
+        if: steps.base.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          .github/scripts/fork-key-tests.sh
+          RELEASE_VERSION=202611060000 bash scripts/install/test-install-fork.sh
+          python3 -m unittest discover -s scripts/tests -p 'test_cx_*.py'
+          git -c core.whitespace=-blank-at-eol diff --check
+          test -z "$(git status --porcelain=v1 -uall)"
+      - name: Publish validated source
+        if: steps.base.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OLD_HEAD: ${{ steps.base.outputs.head }}
+        run: |
+          gh auth setup-git
+          git push --force-with-lease="refs/heads/main:$OLD_HEAD" origin HEAD:main
+      - name: Build daily binaries
+        if: steps.base.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run fork-release.yml --repo lofcz/codex-plus --ref main
+      - name: Save rebase audit
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        with:
+          name: cx-rebase-audit
+          path: ${{ runner.temp }}/cx-range-diff.txt
+          if-no-files-found: ignore
