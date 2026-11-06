@@ -7,6 +7,7 @@ use std::os::fd::OwnedFd;
 use std::path::Path;
 use std::process::Child;
 use std::process::Command;
+use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -61,10 +62,21 @@ log(`agents returned: ${result}, ${skipped}`);
 return await new Promise(() => {});
 "#;
     let server = responses::start_mock_server().await;
+    // Automatic titles contain the same user prompt but belong to a separate thread.
+    let _title = responses::mount_sse_once_match(
+        &server,
+        |request: &wiremock::Request| request_has_thread_source(request, "thread_title"),
+        responses::sse(vec![
+            responses::ev_assistant_message("workflow-title", r#"{"title":"Terminal E2E"}"#),
+            responses::ev_completed("workflow-title-response"),
+        ]),
+    )
+    .await;
     let parent_turn = responses::mount_sse_once_match(
         &server,
         |request: &wiremock::Request| {
-            body_contains(request, WORKFLOW_PROMPT)
+            request_has_thread_source(request, "user")
+                && body_contains(request, WORKFLOW_PROMPT)
                 && !body_contains(request, WORKFLOW_CALL_ID)
                 && !body_contains(request, "You are a workflow subagent.")
         },
@@ -79,17 +91,18 @@ return await new Promise(() => {});
         ]),
     )
     .await;
+    let retry_attempts = Arc::new(AtomicUsize::new(0));
     Mock::given(method("POST"))
         .and(path_regex(".*/responses$"))
         .and(|request: &wiremock::Request| {
             body_contains(request, "You are a workflow subagent.")
                 && body_contains(request, WORKFLOW_AGENT_PROMPT)
         })
-        .respond_with(RetryingAgentResponder::new())
+        .respond_with(RetryingAgentResponder::new(Arc::clone(&retry_attempts)))
         .up_to_n_times(2)
         .mount(&server)
         .await;
-    responses::mount_response_once_match(
+    let skip_turn = responses::mount_response_once_match(
         &server,
         |request: &wiremock::Request| {
             body_contains(request, "You are a workflow subagent.")
@@ -109,7 +122,8 @@ return await new Promise(() => {});
     let parent_follow_up = responses::mount_sse_once_match(
         &server,
         |request: &wiremock::Request| {
-            body_contains(request, WORKFLOW_CALL_ID)
+            request_has_thread_source(request, "user")
+                && body_contains(request, WORKFLOW_CALL_ID)
                 && !body_contains(request, "You are a workflow subagent.")
         },
         responses::sse(vec![
@@ -126,6 +140,15 @@ return await new Promise(() => {});
     let repo_root = codex_utils_cargo_bin::repo_root()?;
     let codex_home = tempfile::tempdir()?;
     let log_dir = tempfile::tempdir()?;
+    // Explicit agent model overrides must refer to a known model, even with a mock provider.
+    let catalog_path = codex_home.path().join("workflow-e2e-models.json");
+    let mut catalog = codex_models_manager::bundled_models_response()?;
+    let mut agent_model = catalog.models.remove(0);
+    agent_model.slug = WORKFLOW_OPTION_MODEL.to_string();
+    agent_model.display_name = WORKFLOW_OPTION_MODEL.to_string();
+    agent_model.multi_agent_version = None;
+    catalog.models = vec![agent_model];
+    std::fs::write(&catalog_path, serde_json::to_vec(&catalog)?)?;
     let role_config_path = codex_home.path().join("workflow-e2e-role.toml");
     std::fs::write(
         &role_config_path,
@@ -141,6 +164,10 @@ return await new Promise(() => {});
     MockResponsesConfig::new(&server.uri())
         .with_approval_policy("on-request")
         .with_root_config("suppress_unstable_features_warning = true")
+        .with_root_config(&format!(
+            "model_catalog_json = {}",
+            serde_json::to_string(&catalog_path)?,
+        ))
         .enable_feature(Feature::Workflows)
         .enable_feature(Feature::Collab)
         .disable_feature(Feature::MultiAgentV2)
@@ -156,11 +183,7 @@ return await new Promise(() => {});
     )?;
     terminal.wait_for_startup()?;
     terminal.send_line(WORKFLOW_PROMPT)?;
-    terminal.wait_for_text(
-        "workflow approval",
-        "Review dynamic workflow before running",
-        WORKFLOW_TIMEOUT,
-    )?;
+    terminal.wait_for_text("workflow approval", "1. Run workflow", WORKFLOW_TIMEOUT)?;
     terminal.write_input(b"\r")?;
 
     terminal.wait_for(
@@ -186,6 +209,10 @@ return await new Promise(() => {});
     );
     terminal.wait_for_text("parent completion", "Workflow launched", WORKFLOW_TIMEOUT)?;
 
+    // A running row appears before the child reaches the model. Retry only an active request.
+    terminal.wait_for("first child request", WORKFLOW_TIMEOUT, |_| {
+        retry_attempts.load(Ordering::SeqCst) == 1
+    })?;
     terminal.open_workflows("workflow list")?;
     ensure!(terminal.screen_contains("Terminal E2E"));
     terminal.write_input(b"\r")?;
@@ -195,7 +222,7 @@ return await new Promise(() => {});
     })?;
     terminal.write_input(b"2")?;
     terminal.wait_for_bottom_text("workflow agent actions", "Retry attempt", WORKFLOW_TIMEOUT)?;
-    terminal.write_input(b"\r")?;
+    terminal.select_numbered_option("Retry attempt")?;
 
     terminal.wait_for(
         "retried agent advanced to skippable agent",
@@ -207,10 +234,16 @@ return await new Promise(() => {});
                 && screen.contains("running")
         },
     )?;
+    ensure!(retry_attempts.load(Ordering::SeqCst) == 2);
+    terminal.wait_for("skippable child request", WORKFLOW_TIMEOUT, |_| {
+        skip_turn.requests().iter().any(|request| {
+            let body = request.body_json().to_string();
+            body.contains("You are a workflow subagent.") && body.contains(WORKFLOW_SKIP_PROMPT)
+        })
+    })?;
     terminal.write_input(b"3")?;
     terminal.wait_for_bottom_text("workflow skip action", "Skip agent", WORKFLOW_TIMEOUT)?;
-    terminal.write_input(b"\x1b[B")?;
-    terminal.write_input(b"\r")?;
+    terminal.select_numbered_option("Skip agent")?;
 
     terminal.wait_for("workflow agent was skipped", WORKFLOW_TIMEOUT, |terminal| {
         terminal.bottom_contents().lines().any(|line| {
@@ -225,8 +258,10 @@ return await new Promise(() => {});
         .requests()
         .into_iter()
         .filter(|request| {
-            let body = request.body_json().to_string();
-            body.contains(WORKFLOW_PROMPT)
+            let json = request.body_json();
+            let body = json.to_string();
+            body_has_thread_source(&json, "user")
+                && body.contains(WORKFLOW_PROMPT)
                 && !body.contains(WORKFLOW_CALL_ID)
                 && !body.contains("You are a workflow subagent.")
         })
@@ -305,8 +340,11 @@ return await new Promise(() => {});
         .requests()
         .into_iter()
         .filter(|request| {
-            let body = request.body_json().to_string();
-            body.contains(WORKFLOW_CALL_ID) && !body.contains("You are a workflow subagent.")
+            let json = request.body_json();
+            let body = json.to_string();
+            body_has_thread_source(&json, "user")
+                && body.contains(WORKFLOW_CALL_ID)
+                && !body.contains("You are a workflow subagent.")
         })
         .count();
     ensure!(
@@ -318,13 +356,13 @@ return await new Promise(() => {});
 }
 
 struct RetryingAgentResponder {
-    attempts: AtomicUsize,
+    attempts: Arc<AtomicUsize>,
     delayed: ResponseTemplate,
     completed: ResponseTemplate,
 }
 
 impl RetryingAgentResponder {
-    fn new() -> Self {
+    fn new(attempts: Arc<AtomicUsize>) -> Self {
         let first = responses::sse(vec![
             responses::ev_response_created("workflow-terminal-child-first"),
             responses::ev_assistant_message(
@@ -339,7 +377,7 @@ impl RetryingAgentResponder {
             responses::ev_completed_with_tokens("workflow-terminal-child-second", 37),
         ]);
         Self {
-            attempts: AtomicUsize::new(0),
+            attempts,
             delayed: responses::sse_response(first)
                 .set_delay(Duration::from_secs(/*secs*/ 30)),
             completed: responses::sse_response(second),
@@ -446,8 +484,16 @@ impl PtyCodex {
 
     fn wait_for_startup(&mut self) -> Result<()> {
         self.wait_for("Codex startup", STARTUP_TIMEOUT, |terminal| {
-            terminal.screen_contains(">_ CX")
-        })
+            terminal.screen_contains(">_ CX") && terminal.screen_contains("mock-model default")
+        })?;
+        // The first frame can precede startup's protected-input drain. Let it finish before
+        // submitting a turn whose approval would otherwise consume the drain's buffered input.
+        let deadline = Instant::now() + Duration::from_millis(/*millis*/ 200);
+        while Instant::now() < deadline {
+            self.read_output(Duration::from_millis(/*millis*/ 10))?;
+            self.answer_startup_queries()?;
+        }
+        Ok(())
     }
 
     fn wait_for_text(&mut self, description: &str, text: &str, timeout: Duration) -> Result<()> {
@@ -497,26 +543,36 @@ impl PtyCodex {
     }
 
     fn send_line(&mut self, text: &str) -> Result<()> {
-        self.write_input(text.as_bytes())?;
-        self.read_output(Duration::from_millis(/*millis*/ 20))?;
+        // Raw rapid keystrokes start a paste burst, so an immediate Enter becomes a newline.
+        // Use the terminal's explicit paste protocol and wait until the composer receives it.
+        self.write_input(format!("\x1b[200~{text}\x1b[201~").as_bytes())?;
+        self.wait_for_text("prompt input", text, STARTUP_TIMEOUT)?;
         self.write_input(b"\r")
+    }
+
+    fn select_numbered_option(&mut self, label: &str) -> Result<()> {
+        let screen = self.bottom_contents();
+        let number = screen
+            .lines()
+            .filter(|line| line.contains(label))
+            .find_map(|line| {
+                let (prefix, _) = line
+                    .trim()
+                    .trim_start_matches('›')
+                    .trim()
+                    .split_once(". ")?;
+                prefix
+                    .parse::<u8>()
+                    .ok()
+                    .filter(|number| (1..=9).contains(number))
+            })
+            .with_context(|| format!("no numbered option for {label}; screen:\n{screen}"))?;
+        self.write_input(number.to_string().as_bytes())
     }
 
     fn open_workflows(&mut self, description: &str) -> Result<()> {
         const LIST_SUBTITLE: &str = "Live and completed runs for this thread";
         self.send_line("/workflows")?;
-        std::thread::sleep(Duration::from_millis(/*millis*/ 150));
-        self.read_output(Duration::from_millis(/*millis*/ 50))?;
-        if self.bottom_contents().contains(LIST_SUBTITLE) {
-            return Ok(());
-        }
-        if self
-            .bottom_contents()
-            .lines()
-            .any(|line| line.trim() == "› /workflows")
-        {
-            self.write_input(b"\r")?;
-        }
         self.wait_for_bottom_text(description, LIST_SUBTITLE, WORKFLOW_TIMEOUT)
     }
 
@@ -644,4 +700,17 @@ fn body_contains(request: &wiremock::Request, text: &str) -> bool {
     String::from_utf8(request.body.clone())
         .ok()
         .is_some_and(|body| body.contains(text))
+}
+
+fn request_has_thread_source(request: &wiremock::Request, source: &str) -> bool {
+    request
+        .body_json::<serde_json::Value>()
+        .is_ok_and(|body| body_has_thread_source(&body, source))
+}
+
+fn body_has_thread_source(body: &serde_json::Value, source: &str) -> bool {
+    body["client_metadata"]["x-codex-turn-metadata"]
+        .as_str()
+        .and_then(|metadata| serde_json::from_str::<serde_json::Value>(metadata).ok())
+        .is_some_and(|metadata| metadata["thread_source"] == source)
 }
