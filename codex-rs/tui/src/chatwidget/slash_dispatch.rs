@@ -403,6 +403,14 @@ impl ChatWidget {
                     control: crate::app_event::VoiceControl::Toggle,
                 });
             }
+            SlashCommand::Workflow => {
+                if self.config.features.enabled(Feature::Workflows) {
+                    self.app_event_tx.send(AppEvent::OpenWorkflowManager {
+                        thread_id: self.thread_id(),
+                        command: String::new(),
+                    });
+                }
+            }
             SlashCommand::Workflows => {
                 if !self.config.features.enabled(Feature::Workflows) {
                     return;
@@ -817,6 +825,14 @@ impl ChatWidget {
             SlashCommand::Rc => self.add_error_message(
                 "Open /rc and choose Disable to turn off remote control.".into(),
             ),
+            SlashCommand::Workflow => {
+                if self.config.features.enabled(Feature::Workflows) {
+                    self.app_event_tx.send(AppEvent::OpenWorkflowManager {
+                        thread_id: self.thread_id(),
+                        command: trimmed.to_string(),
+                    });
+                }
+            }
             SlashCommand::Model if !trimmed.is_empty() => {
                 self.handle_model_command_args(trimmed);
                 self.app_event_tx.send(AppEvent::SettingsSelectionClosed);
@@ -1386,6 +1402,7 @@ impl ChatWidget {
             | SlashCommand::Compact
             | SlashCommand::Review
             | SlashCommand::Model
+            | SlashCommand::Workflow
             | SlashCommand::Presets
             | SlashCommand::Plan
             | SlashCommand::Goal
