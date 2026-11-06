@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cx_root="${XDG_DATA_HOME:-$HOME/.local/share}/codex-plus"
+export CODEX_PACKAGE_ROOT="$cx_root/standalone"
 export CODEX_INSTALL_DIR="$cx_root/bin"
 export CODEX_BIN_NAME='cx-binary'
 cx_server=(--no-daemon)
