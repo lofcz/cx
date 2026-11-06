@@ -2068,8 +2068,13 @@ async fn live_app_server_server_overloaded_error_renders_error() {
         );
 
         let cells = drain_insert_history(&mut rx);
-        assert_eq!(cells.len(), 1);
-        let rendered = lines_to_single_string(&cells[0]);
+        assert_eq!(cells.len(), 2);
+        assert!(chat.overload_recovery.waiting());
+        assert!(
+            lines_to_single_string(&cells[0])
+                .contains("Server overloaded. Resuming in 10s. Press Ctrl+C to cancel.")
+        );
+        let rendered = lines_to_single_string(&cells[1]);
         insta::allow_duplicates! {
             if message.is_empty() {
                 insta::assert_snapshot!(rendered, @"■ Codex is currently experiencing high load.");
