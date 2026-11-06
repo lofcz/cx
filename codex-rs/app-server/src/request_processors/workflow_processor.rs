@@ -18,19 +18,140 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::error_code::invalid_request;
+use codex_app_server_protocol::WorkflowDefinition;
+use codex_app_server_protocol::WorkflowDefinitionDeleteParams;
+use codex_app_server_protocol::WorkflowDefinitionDeleteResponse;
+use codex_app_server_protocol::WorkflowDefinitionListParams;
+use codex_app_server_protocol::WorkflowDefinitionListResponse;
+use codex_app_server_protocol::WorkflowDefinitionReadParams;
+use codex_app_server_protocol::WorkflowDefinitionReadResponse;
+use codex_core::ThreadManager;
+use codex_core::config::Config;
+use codex_features::Feature;
+use codex_workflow_extension::catalog::AUTHORING_GUIDE;
+use codex_workflow_extension::catalog::WorkflowCatalog;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub(crate) struct WorkflowRequestProcessor {
     service: WorkflowService,
     codex_home: AbsolutePathBuf,
+    config: Arc<Config>,
+    thread_manager: Arc<ThreadManager>,
 }
 
 impl WorkflowRequestProcessor {
-    pub(crate) fn new(service: WorkflowService, codex_home: AbsolutePathBuf) -> Self {
+    pub(crate) fn new(
+        service: WorkflowService,
+        config: Arc<Config>,
+        thread_manager: Arc<ThreadManager>,
+    ) -> Self {
         Self {
             service,
-            codex_home,
+            codex_home: config.codex_home.clone(),
+            config,
+            thread_manager,
         }
+    }
+
+    async fn catalog(&self, thread_id: Option<&str>) -> Result<WorkflowCatalog, JSONRPCErrorError> {
+        let config = if let Some(id) = thread_id {
+            let thread = self
+                .thread_manager
+                .get_thread(parse_thread_id(id)?)
+                .await
+                .map_err(|error| invalid_request(error.to_string()))?;
+            if thread.session_source().is_non_root_agent() {
+                return Err(invalid_request(
+                    "Workflow management belongs to the owning thread",
+                ));
+            }
+            let snapshot = thread.config_snapshot().await;
+            let environments = self.thread_manager.environment_manager();
+            for selection in snapshot.environment_selections() {
+                let environment = environments
+                    .get_environment(&selection.environment_id)
+                    .ok_or_else(|| {
+                        invalid_request("The selected workflow environment is unavailable")
+                    })?;
+                if environment.is_remote() {
+                    return Err(invalid_request(
+                        "The workflow library requires an execution environment on the app-server host. Remote workflows still support inline scripts.",
+                    ));
+                }
+            }
+            // The loaded config supplies plugin settings, but its original cwd can be stale
+            // after /cd. Match the Workflow tool's primary execution directory.
+            let mut config = (*thread.config().await).clone();
+            config.cwd = match snapshot.environment_selections().first() {
+                Some(primary) => primary
+                    .cwd
+                    .to_abs_path()
+                    .map_err(|error| invalid_request(error.to_string()))?,
+                None => snapshot.cwd().clone(),
+            };
+            Arc::new(config)
+        } else {
+            Arc::clone(&self.config)
+        };
+        if !config.features.enabled(Feature::Workflows) {
+            return Err(invalid_request("Workflows are disabled"));
+        }
+        Ok(WorkflowCatalog::new(&config, &Arc::downgrade(&self.thread_manager)).await)
+    }
+
+    pub(crate) async fn definition_list(
+        &self,
+        params: WorkflowDefinitionListParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let catalog = self.catalog(params.thread_id.as_deref()).await?;
+        let data = catalog
+            .list()
+            .await
+            .map_err(invalid_request)?
+            .into_iter()
+            .map(definition)
+            .collect();
+        Ok(Some(
+            WorkflowDefinitionListResponse {
+                data,
+                personal_directory: catalog.personal_directory(),
+                authoring_guide: AUTHORING_GUIDE.to_string(),
+            }
+            .into(),
+        ))
+    }
+
+    pub(crate) async fn definition_read(
+        &self,
+        params: WorkflowDefinitionReadParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let catalog = self.catalog(params.thread_id.as_deref()).await?;
+        let value = catalog.read(&params.name).await.map_err(invalid_request)?;
+        Ok(Some(
+            WorkflowDefinitionReadResponse {
+                definition: definition(value.definition),
+                source: value.source,
+                sha256: value.sha256,
+                edit_path: value.edit_path,
+                authoring_guide: AUTHORING_GUIDE.to_string(),
+            }
+            .into(),
+        ))
+    }
+
+    pub(crate) async fn definition_delete(
+        &self,
+        params: WorkflowDefinitionDeleteParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let catalog = self.catalog(params.thread_id.as_deref()).await?;
+        catalog
+            .delete(&params.name, &params.expected_path, &params.sha256)
+            .await
+            .map_err(invalid_request)?;
+        Ok(Some(
+            WorkflowDefinitionDeleteResponse { deleted: true }.into(),
+        ))
     }
 
     pub(crate) async fn read_approval_artifact(
@@ -158,5 +279,17 @@ fn service_error(error: WorkflowServiceError) -> JSONRPCErrorError {
         | WorkflowServiceError::WrongThread
         | WorkflowServiceError::StillRunning
         | WorkflowServiceError::Persistence(_) => invalid_request(error.to_string()),
+    }
+}
+
+fn definition(value: codex_workflow_extension::catalog::WorkflowDefinition) -> WorkflowDefinition {
+    WorkflowDefinition {
+        name: value.name,
+        description: value.description,
+        origin: value.origin,
+        path: value.path,
+        editable: value.editable,
+        deletable: value.deletable,
+        error: value.error,
     }
 }

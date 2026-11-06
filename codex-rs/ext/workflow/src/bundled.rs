@@ -1,9 +1,16 @@
+const WORKFLOWS: &[(&str, &str)] = &[
+    ("code-review", include_str!("bundled/code-review.js")),
+    ("deep-research", include_str!("bundled/deep-research.js")),
+];
+
+pub(crate) fn names() -> impl Iterator<Item = &'static str> {
+    WORKFLOWS.iter().map(|(name, _)| *name)
+}
+
 pub(crate) fn get(name: &str) -> Option<&'static str> {
-    match name {
-        "code-review" => Some(include_str!("bundled/code-review.js")),
-        "deep-research" => Some(include_str!("bundled/deep-research.js")),
-        _ => None,
-    }
+    WORKFLOWS
+        .iter()
+        .find_map(|(candidate, source)| (*candidate == name).then_some(*source))
 }
 
 #[cfg(test)]
