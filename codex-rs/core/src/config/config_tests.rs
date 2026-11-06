@@ -1449,7 +1449,7 @@ fn config_toml_deserializes_model_availability_nux() {
         cfg.tui.expect("tui config should deserialize"),
         Tui {
             status_header: false,
-            server_overloaded_resume: false,
+            server_overloaded_resume: true,
             default_hosts: Default::default(),
             notification_settings: TuiNotificationSettings::default(),
             animations: true,
@@ -1600,6 +1600,43 @@ async fn runtime_config_uses_tui_raw_output_mode() {
         ]
         .into(),
     );
+}
+
+#[tokio::test]
+async fn cx_overload_recovery_defaults_and_cli_overrides() -> anyhow::Result<()> {
+    for (toml, override_value, expected) in [
+        ("", None, true),
+        ("[tui]", None, true),
+        ("[tui]\nserver_overloaded_resume = true", None, true),
+        ("[tui]\nserver_overloaded_resume = false", None, false),
+        ("[tui]\nserver_overloaded_resume = true", Some(false), false),
+        ("[tui]\nserver_overloaded_resume = false", Some(true), true),
+    ] {
+        let codex_home = TempDir::new()?;
+        std::fs::write(codex_home.path().join(CONFIG_TOML_FILE), toml)?;
+        let config = ConfigBuilder::without_managed_config_for_tests()
+            .codex_home(codex_home.path().to_path_buf())
+            .fallback_cwd(Some(codex_home.path().to_path_buf()))
+            .cli_overrides(
+                override_value
+                    .into_iter()
+                    .map(|enabled| {
+                        (
+                            "tui.server_overloaded_resume".to_string(),
+                            TomlValue::Boolean(enabled),
+                        )
+                    })
+                    .collect(),
+            )
+            .build()
+            .await?;
+
+        assert_eq!(
+            config.tui_server_overloaded_resume, expected,
+            "config: {toml}, override: {override_value:?}"
+        );
+    }
+    Ok(())
 }
 
 #[tokio::test]
@@ -4820,7 +4857,7 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
         tui,
         Tui {
             status_header: false,
-            server_overloaded_resume: false,
+            server_overloaded_resume: true,
             default_hosts: Default::default(),
             notification_settings: TuiNotificationSettings::default(),
             animations: true,
