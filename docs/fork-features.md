@@ -65,6 +65,36 @@ The fork's broader checks remain in `.github/scripts/fork-key-tests.sh`.
 
 ## Update from Codex++
 
+The `CX daily sync` workflow runs at 04:17 UTC each day.
+It rebases the CX commits onto `yuguorui/codex-plus`, using the recorded parent commit.
+DeepSeek V4.1 Flash 1017 resolves conflicts through Vercel AI Gateway.
+The `CX_AI_GATEWAY_KEY` repository secret supplies its key.
+Set the `CX_SYNC_MODEL` repository variable to select another Gateway model.
+The local `.env` file can hold the same key; Git ignores that file.
+
+The workflow audits every fork commit and runs `.github/scripts/fork-key-tests.sh` before updating `main`.
+A failed rebase or validation leaves `main` and the last published binaries unchanged.
+Successful syncs trigger `fork-release.yml` for Linux x64, Apple Silicon macOS, and Windows x64.
+Release publication requires successful builds, regression checks, and installer checks.
+
+The CursorPlusPlus `Publish CX binaries to Hetzner` workflow checks for releases hourly at minute 43.
+It uses that repository's existing SSH secrets and verifies uploaded checksums.
+It publishes release directories before replacing the latest-version manifest.
+The server keeps seven releases under `https://gateway.lofcz.dev/dl/cx/releases/`.
+
+Install or migrate a local source build with:
+
+```sh
+curl -fsSL https://gateway.lofcz.dev/dl/cx/install-cx.sh | bash
+```
+
+Then run `cx update` whenever you want the latest published package.
+It preserves Codex configuration, authentication, and sessions.
+The native updater and update notice use the Hetzner channel.
+GitHub Releases retain the original build artifacts and source commit.
+
+### Manual source sync
+
 The parent rewrites its history during daily rebases. Use the pinned parent commit in `.codex-plus-base`.
 Commit local changes before you update. Create an update branch, then run:
 
@@ -77,7 +107,6 @@ git add .codex-plus-base
 git commit -m 'chore: update Codex++ base'
 ```
 
-Resolve conflicts and run the fork checks before merging the update branch.
+Resolve conflicts and run the fork checks before updating the main branch with `--force-with-lease`.
 The inherited automatic rebase runs only in the parent repository.
-This fork does not require the parent's model API secrets.
-Release installers and `cx update` use `lofcz/codex-plus` releases.
+CX uses its separate daily workflow and Gateway secret.
