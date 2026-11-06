@@ -56,7 +56,15 @@ class CxInstallTests(unittest.TestCase):
         for name in ("bin/codex++", "bin/codex-code-mode-host", "bin/codex-exec-server", "codex-path/rg", "codex-resources/bwrap"):
             path = package / name
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(f"#!/bin/sh\necho 'cx {version}'\n")
+            path.write_text(
+                '#!/bin/sh\n'
+                'for arg in "$@"; do\n'
+                '  if [ "$arg" = "--test-package-root" ]; then\n'
+                '    printf "%s\\n" "$CODEX_PACKAGE_ROOT"; exit 0\n'
+                '  fi\n'
+                'done\n'
+                f"echo 'cx {version}'\n"
+            )
             path.chmod(0o755)
         (package / "codex-package.json").write_text("{}")
         archive = directory / "codex-package-x86_64-unknown-linux-musl.tar.gz"
@@ -80,6 +88,11 @@ class CxInstallTests(unittest.TestCase):
             result = self.install()
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(self.current_version(), f"cx {version}")
+            package_root = subprocess.check_output(
+                [str(self.bin / "cx"), "--test-package-root"],
+                env=self.env, text=True,
+            ).strip()
+            self.assertEqual(package_root, str(self.home / ".local/share/codex-plus/standalone"))
         self.assertEqual((self.bin / "codex").read_text(), "official codex remains here")
         self.assertEqual((self.config / "config.toml").read_text(), 'model = "keep-me"\n')
         self.assertFalse((self.config / "packages").exists())
