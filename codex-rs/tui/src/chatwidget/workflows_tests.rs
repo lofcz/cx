@@ -111,7 +111,7 @@ async fn bounded_workflow_summary_keeps_composer_in_short_viewport() {
         rendered.contains("Third workflow"),
         "workflow overview missing; rendered={rendered:?}"
     );
-    assert!(rendered.contains("Ask Codex to do anything"));
+    assert!(rendered.contains("Ask CX to do anything"));
 }
 
 #[test]
