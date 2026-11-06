@@ -55,7 +55,7 @@ pub fn get_upgrade_version(config: &Config) -> Option<String> {
     })
 }
 
-const LATEST_RELEASE_URL: &str = "https://gateway.lofcz.dev/dl/cx/latest.json";
+const LATEST_RELEASE_URL: &str = "https://cx.lofcz.dev/latest.json";
 
 #[derive(Deserialize, Debug, Clone)]
 struct ReleaseInfo {
