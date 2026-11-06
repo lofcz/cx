@@ -2063,7 +2063,8 @@ async fn live_app_server_server_overloaded_error_renders_error() {
             /*replay_kind*/ None,
         );
 
-        let cells = drain_insert_history(&mut rx);
+        // Recovery diagnostics live in the transcript, outside compact chat.
+        let cells = drain_insert_history_transcript(&mut rx);
         assert_eq!(cells.len(), 2);
         assert!(chat.overload_recovery.waiting());
         assert!(
@@ -2073,9 +2074,9 @@ async fn live_app_server_server_overloaded_error_renders_error() {
         let rendered = lines_to_single_string(&cells[1]);
         insta::allow_duplicates! {
             if message.is_empty() {
-                insta::assert_snapshot!(rendered, @"■ Codex is currently experiencing high load.");
+                insta::assert_snapshot!(rendered.trim(), @"■ Codex is currently experiencing high load.");
             } else {
-                insta::assert_snapshot!(rendered, @"■ server overloaded");
+                insta::assert_snapshot!(rendered.trim(), @"■ server overloaded");
             }
         }
         assert!(!chat.bottom_pane.is_task_running());
