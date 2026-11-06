@@ -365,7 +365,8 @@ async fn review_restores_context_window_indicator() {
 async fn failed_turn_completion_preserves_queued_review_start() {
     const ERROR: &str = "Selected model is at capacity. Please try a different model.";
 
-    let (mut chat, _rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    tokio::time::pause();
     chat.thread_id = Some(ThreadId::new());
     handle_turn_started(&mut chat, "turn-1");
     assert!(chat.queue_user_message_with_options(
@@ -376,7 +377,17 @@ async fn failed_turn_completion_preserves_queued_review_start() {
     handle_error(&mut chat, ERROR, Some(CodexErrorInfo::ServerOverloaded));
     assert!(chat.overload_recovery.waiting());
     assert!(op_rx.try_recv().is_err());
-    chat.on_server_overloaded_retry(chat.overload_recovery.token.unwrap());
+    let retry_token = tokio::time::timeout(Duration::from_secs(11), async {
+        while let Some(event) = rx.recv().await {
+            if let AppEvent::ServerOverloadedRetry { token } = event {
+                return token;
+            }
+        }
+        panic!("retry event channel closed");
+    })
+    .await
+    .expect("queued review should receive the overload retry event");
+    chat.on_server_overloaded_retry(retry_token);
     assert_matches!(op_rx.try_recv(), Ok(Op::Review { .. }));
     assert!(chat.input_queue.user_turn_pending_start);
     assert!(chat.bottom_pane.is_task_running());
