@@ -20,7 +20,7 @@ for cx_file in install-fork.sh cx-local.sh; do
   curl --fail --silent --show-error --location \
     "$cx_base/releases/$cx_version/$cx_file" -o "$cx_tmp/$cx_file"
 done
-CODEX_RELEASE_REPOSITORY=lofcz/codex-plus \
+CODEX_RELEASE_REPOSITORY=lofcz/cx \
 CODEX_RELEASE_BASE_URL="$cx_base/releases/$cx_version" \
 CODEX_PACKAGE_ROOT="$cx_root/standalone" \
 CODEX_INSTALL_DIR="$cx_root/bin" CODEX_BIN_NAME=cx-binary \
