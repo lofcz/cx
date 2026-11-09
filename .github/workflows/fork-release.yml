@@ -185,6 +185,11 @@ jobs:
         shell: bash
         run: git config --global core.longpaths true
 
+      - name: Install Python for release metadata
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
       - name: Install Linux dependencies
         if: ${{ runner.os == 'Linux' }}
         shell: bash
