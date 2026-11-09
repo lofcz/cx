@@ -80,6 +80,7 @@ jobs:
       version: ${{ steps.metadata.outputs.version }}
       tag: ${{ steps.metadata.outputs.tag }}
       rust_channel: ${{ steps.rust.outputs.channel }}
+      compatibility_version: ${{ steps.compatibility.outputs.version }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -103,6 +104,24 @@ jobs:
 
           echo "version=${requested_version}" >> "$GITHUB_OUTPUT"
           echo "tag=rust-v${requested_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve protocol compatibility from the recorded upstream base
+        id: compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+            git fetch --unshallow origin
+          fi
+          git fetch --no-tags https://github.com/openai/codex.git '+refs/tags/rust-v*:refs/tags/openai/rust-v*'
+          python3 scripts/cx_compat_version.py > compatibility.json
+          cat compatibility.json
+          python3 -c 'import json; print("version=" + json.load(open("compatibility.json"))["version"])' >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        with:
+          name: cx-protocol-compatibility
+          path: compatibility.json
 
       - name: Resolve Rust toolchain
         id: rust
@@ -291,6 +310,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Stamp both Cargo (models endpoint/User-Agent) and package metadata.
+          # CODEX_FORK_RELEASE_VERSION remains the separate CX display identity.
+          python3 ../scripts/cx_compat_version.py --stamp '${{ needs.metadata.outputs.compatibility_version }}'
           if [[ "${{ matrix.target }}" == "x86_64-pc-windows-msvc" ]]; then
             export LIBSQLITE3_FLAGS=SQLITE_DISABLE_INTRINSIC
           fi
