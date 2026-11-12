@@ -22,10 +22,7 @@
 use crate::multi_agents::AgentPickerThreadEntry;
 use crate::multi_agents::SubAgentActivityDisplay;
 use crate::multi_agents::format_agent_picker_item_name;
-use crate::multi_agents::next_agent_shortcut;
-use crate::multi_agents::previous_agent_shortcut;
 use codex_protocol::ThreadId;
-use ratatui::text::Span;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use uuid::Uuid;
@@ -43,6 +40,7 @@ use uuid::Uuid;
 pub(crate) struct AgentNavigationState {
     /// Latest picker metadata for each tracked thread id.
     threads: HashMap<ThreadId, AgentPickerThreadEntry>,
+    pub(super) activity: HashMap<ThreadId, super::subagents::AgentLiveDetails>,
     /// First-seen order for keyboard cycling. The picker groups waiting threads first.
     order: Vec<ThreadId>,
     /// Threads with observed terminal liveness that must not be revived by delayed activity.
@@ -52,8 +50,6 @@ pub(crate) struct AgentNavigationState {
     picker_excluded_threads: HashSet<ThreadId>,
     /// Inactive threads with an approval outstanding in their event store.
     pub(super) pending_approvals: HashSet<ThreadId>,
-    /// Thread IDs in the currently rendered picker, so a refresh can restore its cursor by ID.
-    pub(super) picker_row_ids: Vec<ThreadId>,
     /// Subagent threads created by a dynamic Workflow run.
     workflow_agent_threads: HashSet<ThreadId>,
     /// Coalesces root refreshes while rejecting replies from a previous session.
@@ -185,6 +181,9 @@ impl AgentNavigationState {
         if !self.threads.contains_key(&thread_id) {
             self.order.push(thread_id);
         }
+        if is_closed && let Some(details) = self.activity.get_mut(&thread_id) {
+            details.observe_liveness(false);
+        }
         let (previous_agent_path, previous_is_running) = self
             .threads
             .get(&thread_id)
@@ -226,6 +225,10 @@ impl AgentNavigationState {
             entry.is_running = false;
             self.stopped_threads.insert(activity.thread_id);
         }
+        self.activity
+            .entry(activity.thread_id)
+            .or_default()
+            .observe_liveness(entry.is_running);
     }
 
     pub(crate) fn mark_running(&mut self, thread_id: ThreadId) {
@@ -248,6 +251,10 @@ impl AgentNavigationState {
     pub(crate) fn set_running(&mut self, thread_id: ThreadId, is_running: bool) {
         if let Some(entry) = self.threads.get_mut(&thread_id) {
             entry.is_running = is_running;
+            self.activity
+                .entry(thread_id)
+                .or_default()
+                .observe_liveness(is_running);
         }
     }
 
@@ -266,6 +273,9 @@ impl AgentNavigationState {
     /// this up" by deleting the entry instead, wraparound navigation will silently change shape
     /// mid-session.
     pub(crate) fn mark_closed(&mut self, thread_id: ThreadId) {
+        if let Some(details) = self.activity.get_mut(&thread_id) {
+            details.observe_liveness(false);
+        }
         if let Some(entry) = self.threads.get_mut(&thread_id) {
             entry.is_closed = true;
             entry.is_running = false;
@@ -283,12 +293,12 @@ impl AgentNavigationState {
     /// to a pristine single-session state.
     pub(crate) fn clear(&mut self) {
         self.threads.clear();
+        self.activity.clear();
         self.order.clear();
         self.stopped_threads.clear();
         self.parent_owned_threads.clear();
         self.picker_excluded_threads.clear();
         self.pending_approvals.clear();
-        self.picker_row_ids.clear();
         self.workflow_agent_threads.clear();
         self.picker_refresh = None;
     }
@@ -300,6 +310,7 @@ impl AgentNavigationState {
     /// would leave ghost rows in `/subagents`.
     pub(crate) fn remove(&mut self, thread_id: ThreadId) {
         self.threads.remove(&thread_id);
+        self.activity.remove(&thread_id);
         self.order.retain(|candidate| *candidate != thread_id);
         self.stopped_threads.remove(&thread_id);
         self.parent_owned_threads.remove(&thread_id);
@@ -463,19 +474,6 @@ impl AgentNavigationState {
         )
     }
 
-    /// Builds the `/subagents` picker subtitle from the same canonical bindings used by key handling.
-    ///
-    /// Keeping this text derived from the actual shortcut helpers prevents the picker copy from
-    /// drifting if the bindings ever change on one platform.
-    pub(crate) fn picker_subtitle() -> String {
-        let previous: Span<'static> = previous_agent_shortcut().into();
-        let next: Span<'static> = next_agent_shortcut().into();
-        format!(
-            "Select an agent to watch. {} previous, {} next.",
-            previous.content, next.content
-        )
-    }
-
     #[cfg(test)]
     /// Returns only the ordered thread ids for focused tests of traversal invariants.
     ///
@@ -624,16 +622,6 @@ mod tests {
                 .ordered_path_backed_subagent_threads(Some(main_thread_id))
                 .is_empty()
         );
-    }
-
-    #[test]
-    fn picker_subtitle_mentions_shortcuts() {
-        let previous: Span<'static> = previous_agent_shortcut().into();
-        let next: Span<'static> = next_agent_shortcut().into();
-        let subtitle = AgentNavigationState::picker_subtitle();
-
-        assert!(subtitle.contains(previous.content.as_ref()));
-        assert!(subtitle.contains(next.content.as_ref()));
     }
 
     #[test]
