@@ -314,6 +314,7 @@ impl App {
             .agent_navigation
             .active_agent_label(self.current_displayed_thread_id(), self.primary_thread_id);
         self.chat_widget.set_active_agent_label(label);
+        self.sync_subagents();
         self.sync_side_thread_ui();
     }
 
@@ -1247,6 +1248,9 @@ impl App {
             None
         };
         let is_turn_started = matches!(notification, ServerNotification::TurnStarted(_));
+        let agent_activity_changed = self
+            .agent_navigation
+            .observe_agent_notification(thread_id, &notification);
         let is_thread_closed = matches!(notification, ServerNotification::ThreadClosed(_));
         let notification_status_change = SideParentStatusChange::for_notification(&notification);
         let (sender, store) = {
@@ -1377,6 +1381,9 @@ impl App {
             self.clear_side_parent_action_status(thread_id);
         }
         self.refresh_pending_thread_approvals().await;
+        if agent_activity_changed || is_turn_started || is_thread_closed || turn_stopped {
+            self.sync_subagents();
+        }
         Ok(())
     }
 

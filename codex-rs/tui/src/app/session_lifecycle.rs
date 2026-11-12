@@ -4,7 +4,6 @@
 //! resuming/forking saved sessions, replacing ChatWidget instances, and maintaining the agent picker
 //! cache used for multi-agent navigation.
 
-use super::agent_picker::AGENT_PICKER_VIEW_ID;
 use super::app_server_event_targets::ServerNotificationThreadTarget;
 use super::app_server_event_targets::server_notification_thread_target;
 use super::app_server_event_targets::server_request_thread_id;
@@ -171,67 +170,10 @@ impl App {
         }
 
         if !self.refresh_agent_picker() {
-            let params = self.agent_picker_selection_view_params(/*selected*/ None);
-            self.chat_widget.show_selection_view(params);
+            self.chat_widget.show_subagents();
         }
         if let Some(primary_thread_id) = self.primary_thread_id {
             self.refresh_agent_picker_threads(app_server, primary_thread_id);
-        }
-    }
-
-    pub(super) fn agent_picker_selection_view_params(
-        &mut self,
-        selected: Option<ThreadId>,
-    ) -> SelectionViewParams {
-        let mut threads = self.agent_navigation.visible_threads();
-        let pending = &self.agent_navigation.pending_approvals;
-        threads.sort_by_key(|(id, _)| !pending.contains(id));
-        let mut row_ids = Vec::with_capacity(threads.len());
-        let mut initial_selected_idx = None;
-        let items: Vec<SelectionItem> = threads
-            .into_iter()
-            .enumerate()
-            .map(|(idx, (thread_id, entry))| {
-                row_ids.push(thread_id);
-                let is_pending = pending.contains(&thread_id);
-                let is_current = self.active_thread_id == Some(thread_id);
-                if selected == Some(thread_id)
-                    || initial_selected_idx.is_none() && (is_pending || is_current)
-                {
-                    initial_selected_idx = Some(idx);
-                }
-                let name = self.thread_label(thread_id);
-                let uuid = thread_id.to_string();
-                SelectionItem {
-                    name: if is_pending {
-                        format!("{name} (needs approval)")
-                    } else {
-                        name.clone()
-                    },
-                    name_prefix_spans: agent_picker_status_dot_spans(entry.is_closed),
-                    description: Some(uuid.clone()),
-                    is_current,
-                    actions: vec![Box::new(move |tx| {
-                        tx.send(AppEvent::SelectAgentThread(thread_id));
-                    })],
-                    dismiss_on_select: true,
-                    search_value: Some(format!("{name} {uuid}")),
-                    ..Default::default()
-                }
-            })
-            .collect();
-        self.agent_navigation.picker_row_ids = row_ids;
-
-        SelectionViewParams {
-            view_id: Some(AGENT_PICKER_VIEW_ID),
-            title: Some("Subagents".to_string()),
-            subtitle: Some(AgentNavigationState::picker_subtitle()),
-            footer_hint: Some(standard_popup_hint_line()),
-            items,
-            initial_selected_idx,
-            is_searchable: true,
-            search_placeholder: Some("Search by name or ID".to_string()),
-            ..SelectionViewParams::picker()
         }
     }
 
@@ -308,6 +250,8 @@ impl App {
             .await
         {
             Ok(thread) => {
+                self.agent_navigation
+                    .observe_agent_snapshot(thread_id, &thread);
                 let is_parent_owned = thread_blocks_direct_input(&thread);
                 let agent_path = source_agent_path(&thread.source);
                 let is_running = matches!(

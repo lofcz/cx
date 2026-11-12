@@ -2,13 +2,12 @@
 source: tui/src/app/tests.rs
 expression: "render_bottom_popup(&app.chat_widget, 80)"
 ---
-  Subagents
-  Select an agent to watch. ⌥← previous, ⌥→ next.
+ Subagents · 2 running · 1–3 of 3
+ / Search:
+›● /root/review                needs approval                             0m 00s
+ ● /root/worker                needs approval                             0m 00s
+ ● Main [default]              idle
 
-  Search by name or ID
+ /root/review · 00000000-0000-0000-0000-000000000002 · 0m 00s
 
-› • /root/review (needs approval)  00000000-0000-0000-0000-000000000002
-  • /root/worker (needs approval)  00000000-0000-0000-0000-000000000123
-  • Main [default] (current)       00000000-0000-0000-0000-000000000001
-
-  enter select · esc back
+[enter View] [x Stop] [esc Close]

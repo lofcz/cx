@@ -175,6 +175,9 @@
 //! # Parent-Owned Thread Mode
 //!
 //! Parent-owned subagent threads keep the draft editable while blocking agent-directed submission.
+//! When a subagent roster is visible, Down on an empty prompt (or F6 with a draft)
+//! opens its manager before ordinary editor navigation. Popups and paste bursts retain priority.
+//! Shift+F6 shows or hides the roster without changing the draft or its selection.
 //! On the `Enter` and `Tab` submission paths, normal prompts, disallowed slash commands, and `!`
 //! shell commands return `ParentOwnedInputBlocked` without clearing the draft. Bare local and
 //! navigation slash commands remain available so users can leave or manage the view.

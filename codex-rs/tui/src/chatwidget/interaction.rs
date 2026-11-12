@@ -23,6 +23,21 @@ pub(crate) enum KeyEventAction {
 const PENDING_STEER_DOUBLE_ESCAPE_WINDOW: Duration = Duration::from_millis(250);
 
 impl ChatWidget {
+    pub(crate) fn set_subagents(
+        &mut self,
+        rows: Vec<crate::bottom_pane::subagents::SubagentRow>,
+    ) -> bool {
+        self.bottom_pane.set_subagents(rows)
+    }
+
+    pub(crate) fn show_subagents(&mut self) {
+        self.bottom_pane.show_subagents();
+    }
+
+    pub(crate) fn handle_subagents_mouse(&mut self, event: crossterm::event::MouseEvent) -> bool {
+        self.bottom_pane.handle_subagents_mouse(event)
+    }
+
     pub(crate) fn current_patch_approval(&self) -> Option<(ThreadId, &str)> {
         let patch = self.bottom_pane.current_patch_approval()?;
         Some((patch.thread_id, &patch.id))

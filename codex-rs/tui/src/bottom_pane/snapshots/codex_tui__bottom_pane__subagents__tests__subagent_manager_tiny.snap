@@ -1,0 +1,16 @@
+---
+source: tui/src/bottom_pane/subagents.rs
+expression: "paint(&view, 16, None)"
+---
+ Subagents · 3 r
+ / Search:
+ ● Main ...  idl
+›● /root...  run
+ ● /root...  run
+ ● /root...  run
+
+ /root/worker_1
+ Checking keyboa
+[View]
+[Stop]
+[Close]

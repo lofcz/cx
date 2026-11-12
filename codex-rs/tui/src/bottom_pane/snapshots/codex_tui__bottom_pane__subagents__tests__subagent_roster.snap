@@ -1,0 +1,9 @@
+---
+source: tui/src/bottom_pane/subagents.rs
+expression: "paint(&roster, 120, None)"
+---
+ 3 subagents · 3 running · F6 manage                                                                        [⇧F6 hide]
+ ● Main [default]                    idle  Checking keyboard and mouse interactions                1m 30s · 12.3k tokens
+ ● /root/worker_1                    running  Checking keyboard and mouse interactions             1m 30s · 12.3k tokens
+ ● /root/worker_2                    running  Checking keyboard and mouse interactions             1m 30s · 12.3k tokens
+ ● /root/worker_3                    running  Checking keyboard and mouse interactions             1m 30s · 12.3k tokens
