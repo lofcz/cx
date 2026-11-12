@@ -5,6 +5,26 @@
 use super::*;
 
 impl ChatComposer {
+    /// Down on an empty prompt or F6 opens the manager; Shift+F6 toggles the roster.
+    pub(crate) fn subagents_navigation_available(&self, key: KeyEvent) -> bool {
+        let move_down = if self.draft.textarea.is_vim_normal_mode() {
+            &self.vim_normal_keymap.move_down
+        } else {
+            &self.editor_keymap.move_down
+        };
+        key.kind == KeyEventKind::Press
+            && (key.code == KeyCode::F(6)
+                && key.modifiers.difference(KeyModifiers::SHIFT).is_empty()
+                || key.code == KeyCode::Down
+                    && key.modifiers.is_empty()
+                    && self.is_empty()
+                    && move_down.is_pressed(key))
+            && self.has_focus
+            && !self.is_in_paste_burst()
+            && !self.popup_active()
+            && !self.draft.textarea.is_vim_operator_pending()
+    }
+
     pub(crate) fn agents_navigation_key_available(&self) -> bool {
         let move_left = if self.draft.textarea.is_vim_normal_mode() {
             &self.vim_normal_keymap.move_left
