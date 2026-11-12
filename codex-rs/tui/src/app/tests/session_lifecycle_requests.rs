@@ -6011,20 +6011,10 @@ fn session_lifecycle_avoids_redundant_subagent_metadata_reads() -> Result<()> {
                     .expect("opening the agent picker waited for the app server");
                 drop(child_store_guard);
                 insta::assert_snapshot!(
+                    "subagent_manager_while_refreshing",
                     render_bottom_popup(&app.chat_widget, /*width*/ 80)
                         .replace(&root_thread_id.to_string(), "[root]")
-                        .replace(&child_thread_id.to_string(), "[child]"),
-                    @r###"
-                      Subagents
-                      Select an agent to watch. ⌥← previous, ⌥→ next.
-
-                      Search by name or ID
-
-                    › • Main [default] (current)  [root]
-                      • /root/worker              [child]
-
-                      enter select · esc back
-                    "###
+                        .replace(&child_thread_id.to_string(), "[child]")
                 );
                 assert_eq!(take_backfill_counts(&requests), (0, 0));
                 tokio::time::timeout(Duration::from_secs(5), started_rx).await??;

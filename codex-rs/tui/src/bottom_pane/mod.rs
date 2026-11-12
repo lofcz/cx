@@ -68,6 +68,7 @@ use codex_protocol::user_input::TextElement;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyEventKind;
+use crossterm::event::KeyModifiers;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Stylize;
@@ -230,6 +231,7 @@ mod selection_row_layout;
 mod selection_tabs;
 pub(crate) use selection_tabs::render_filled_tab_bar;
 mod startup;
+pub(crate) mod subagents;
 mod textarea;
 pub(crate) use textarea::TextArea;
 pub(crate) use textarea::TextAreaState;
@@ -345,6 +347,7 @@ pub(crate) struct BottomPane {
     pending_input_preview: PendingInputPreview,
     /// Inactive threads with pending approval requests.
     pending_thread_approvals: PendingThreadApprovals,
+    subagents: subagents::SubagentRoster,
     context_window_percent: Option<i64>,
     context_window_used_tokens: Option<i64>,
     keymap: RuntimeKeymap,
@@ -435,6 +438,7 @@ impl BottomPane {
             unified_exec_footer: UnifiedExecFooter::new(),
             pending_input_preview: PendingInputPreview::new(),
             pending_thread_approvals: PendingThreadApprovals::new(),
+            subagents: subagents::SubagentRoster::default(),
             esc_backtrack_hint: false,
             animations_enabled,
             effects,
@@ -1039,6 +1043,15 @@ impl BottomPane {
             if self.handle_inline_banner_key(key_event) {
                 return InputResult::None;
             }
+            if self.subagents.visible() && self.composer.subagents_navigation_available(key_event) {
+                if key_event.modifiers == KeyModifiers::SHIFT {
+                    self.subagents.toggle();
+                    self.request_redraw();
+                } else {
+                    self.app_event_tx.send(AppEvent::OpenAgentPicker);
+                }
+                return InputResult::None;
+            }
             // Allow the configured interrupt while a task is running, even when its
             // status row is hidden or the composer has focus.
             // When a popup is active, prefer dismissing it over interrupting the task.
@@ -1201,6 +1214,9 @@ impl BottomPane {
     }
 
     fn schedule_active_view_frame(&self) {
+        if !self.has_active_view() && self.subagents.visible() && self.subagents.running() {
+            self.request_redraw_in(Duration::from_secs(1));
+        }
         if let Some(questions) = &self.questions {
             if let Some(delay) = questions.next_frame_delay() {
                 self.request_redraw_in(delay);
@@ -2084,6 +2100,61 @@ impl BottomPane {
         self.push_view(view);
     }
 
+    pub(crate) fn set_subagents(&mut self, rows: Vec<subagents::SubagentRow>) -> bool {
+        let mut updated = false;
+        for view in &mut self.view_stack {
+            updated |= view.update_subagents(&rows);
+        }
+        if self.subagents.set_rows(rows) || updated {
+            self.request_redraw();
+        }
+        updated
+    }
+
+    pub(crate) fn show_subagents(&mut self) {
+        self.show_view(Box::new(subagents::SubagentManager::new(
+            self.subagents.rows.clone(),
+            self.app_event_tx.clone(),
+            self.keymap.list.clone(),
+        )));
+    }
+
+    pub(crate) fn subagents_mouse_capture(&self) -> bool {
+        self.active_view()
+            .is_some_and(|view| view.view_id() == Some(subagents::VIEW_ID))
+            || (!self.has_active_view()
+                && self
+                    .questions
+                    .as_ref()
+                    .is_none_or(|q| q.unanswered_count() == 0)
+                && self.subagents.visible())
+    }
+
+    pub(crate) fn handle_subagents_mouse(&mut self, event: crossterm::event::MouseEvent) -> bool {
+        if self.warnings_active() {
+            return false;
+        }
+        if let Some(view) = self.view_stack.last_mut() {
+            if !view.handle_mouse(event) {
+                return false;
+            }
+            if view.is_complete() {
+                let completion = view.completion();
+                self.pop_active_view_with_completion(completion);
+            }
+        } else if self
+            .questions
+            .as_ref()
+            .is_some_and(|q| q.unanswered_count() > 0)
+            || !self.subagents.visible()
+            || !self.subagents.mouse(event, &self.app_event_tx)
+        {
+            return false;
+        }
+        self.request_redraw();
+        true
+    }
+
     pub(crate) fn suppress_current_view_key_until_release(
         &mut self,
         key: KeyBinding,
@@ -2660,6 +2731,9 @@ impl BottomPane {
                 }))
             };
             flex2.push(/*flex*/ 0, composer);
+            if !has_questions {
+                flex2.push(/*flex*/ 1, RenderableItem::Borrowed(&self.subagents));
+            }
             RenderableItem::Owned(Box::new(flex2))
         }
     }

@@ -13,6 +13,11 @@ Both projects use the Apache-2.0 license. Their existing license and notices rem
   Typing, pasting, or deleting replaces the selected text.
 - Press **Alt+Up/Down** to increase or decrease reasoning effort.
   Queue and question navigation uses **Ctrl+Alt+Up/Down**.
+- Subagents appear below the prompt with live activity, status, elapsed time, and reported token usage.
+  Press **F6**, **Down** on an empty prompt, or run `/subagents` to open their manager.
+  Use the arrow keys, Page Up/Down, Home/End, or the mouse wheel to navigate; **Enter** opens the selected transcript and **x** stops a running child’s current turn.
+  Click a row to select it and use **View**, **Stop**, or **Close**. Click the search field or press **/** to search.
+  **Shift+F6** or the roster’s **show/hide** button collapses its rows. Parent agents retain control of child instructions.
 - The bottom bar shows remaining account usage and its reset time.
   Advance usage warnings and model-switch prompts stay hidden until an actual usage limit occurs.
   The launcher disables the extra header above the prompt.

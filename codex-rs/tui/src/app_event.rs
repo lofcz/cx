@@ -487,6 +487,14 @@ pub(crate) enum AppEvent {
     },
     /// Switch the active thread to the selected agent.
     SelectAgentThread(ThreadId),
+    /// Interrupt the selected child's current turn without transferring instruction ownership.
+    StopSubagent(ThreadId),
+    SubagentStopFinished {
+        root: ThreadId,
+        thread_id: ThreadId,
+        request_id: Uuid,
+        result: Result<(), String>,
+    },
 
     /// Open a side conversation for the current thread.
     StartSide {

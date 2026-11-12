@@ -3599,6 +3599,12 @@ impl App {
             AppEvent::OpenAgentPicker => {
                 self.open_agent_picker(app_server).await;
             }
+            AppEvent::StopSubagent(thread_id) => {
+                self.stop_subagent(app_server, thread_id).await;
+            }
+            AppEvent::SubagentStopFinished { root, thread_id, request_id, result } => {
+                self.finish_subagent_stop(root, thread_id, request_id, result);
+            }
             AppEvent::AgentPickerThreadsLoaded {
                 primary_thread_id,
                 request_id,

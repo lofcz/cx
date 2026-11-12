@@ -28,6 +28,14 @@ pub(crate) enum ViewPresentation {
 
 /// Trait implemented by every view that can be shown in the bottom pane.
 pub(crate) trait BottomPaneView: Renderable {
+    fn update_subagents(&mut self, _rows: &[super::subagents::SubagentRow]) -> bool {
+        false
+    }
+
+    fn handle_mouse(&mut self, _event: crossterm::event::MouseEvent) -> bool {
+        false
+    }
+
     /// Centered views preserve the preceding view as their backdrop.
     fn presentation(&self) -> ViewPresentation {
         ViewPresentation::Inline

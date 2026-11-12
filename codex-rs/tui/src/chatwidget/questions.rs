@@ -17,6 +17,8 @@ impl ChatWidget {
                 .is_some_and(|q| q.expanded)
         {
             MouseCapture::Disabled
+        } else if self.bottom_pane.subagents_mouse_capture() {
+            MouseCapture::Enabled
         } else {
             MouseCapture::Inherit
         }

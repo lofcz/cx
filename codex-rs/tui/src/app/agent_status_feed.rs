@@ -136,7 +136,7 @@ impl AgentStatusThreadPreview {
     }
 }
 
-fn activity_summary(item: &ThreadItemPayload) -> Option<String> {
+pub(super) fn activity_summary(item: &ThreadItemPayload) -> Option<String> {
     let summary = match item {
         ThreadItemPayload::AgentMessage { text, .. } | ThreadItemPayload::Plan { text, .. } => text,
         ThreadItemPayload::Reasoning { summary, .. } => summary.last()?,
@@ -228,9 +228,10 @@ fn activity_summary(item: &ThreadItemPayload) -> Option<String> {
     bounded_summary(summary)
 }
 
-fn bounded_summary(summary: &str) -> Option<String> {
+pub(super) fn bounded_summary(summary: &str) -> Option<String> {
     let summary = truncate_text(summary, AGENT_STATUS_PREVIEW_GRAPHEMES);
     let summary = summary.split_whitespace().collect::<Vec<_>>().join(" ");
+    let summary: String = summary.chars().filter(|ch| !ch.is_control()).collect();
     (!summary.is_empty()).then_some(summary)
 }
 

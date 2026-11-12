@@ -1,0 +1,14 @@
+---
+source: tui/src/bottom_pane/subagents.rs
+expression: "paint(&view, 40, None)"
+---
+ Subagents · 3 running · 1–4 of 4
+ / Search:
+ ● Main [defa...  idle  Checking keyb...
+›● /root/work...  running  Checking k...
+ ● /root/work...  running  Checking k...
+ ● /root/work...  running  Checking k...
+
+ /root/worker_1 · 00000000-0000-0000-000
+ Checking keyboard and mouse interaction
+[enter View] [x Stop] [esc Close]

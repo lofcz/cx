@@ -1,0 +1,12 @@
+---
+source: tui/src/app/tests/session_lifecycle_requests.rs
+expression: "render_bottom_popup(&app.chat_widget,\n80).replace(&root_thread_id.to_string(),\n\"[root]\").replace(&child_thread_id.to_string(), \"[child]\")"
+---
+ Subagents · 0 running · 1–2 of 2
+ / Search:
+›● Main [default]              idle
+ ○ /root/worker                idle
+
+ Main [default] · [root]
+
+[enter View] [esc Close]

@@ -6,6 +6,33 @@ use assert_matches::assert_matches;
 use pretty_assertions::assert_eq;
 
 #[test]
+fn subagent_shortcuts_preserve_editing_selection_and_popup_priority() {
+    let (mut composer, _) = new_test_composer();
+    assert!(composer.subagents_navigation_available(KeyCode::Down.into()));
+    composer.insert_str("a draft");
+    assert!(!composer.subagents_navigation_available(KeyCode::Down.into()));
+    for code in [KeyCode::Up, KeyCode::Down] {
+        assert!(!composer.subagents_navigation_available(KeyEvent::new(code, KeyModifiers::SHIFT)));
+    }
+    assert!(composer.subagents_navigation_available(KeyCode::F(6).into()));
+    assert!(
+        composer.subagents_navigation_available(KeyEvent::new(KeyCode::F(6), KeyModifiers::SHIFT))
+    );
+    for kind in [KeyEventKind::Repeat, KeyEventKind::Release] {
+        assert!(
+            !composer.subagents_navigation_available(KeyEvent::new_with_kind(
+                KeyCode::F(6),
+                KeyModifiers::NONE,
+                kind
+            ))
+        );
+    }
+    composer.set_text_content("/".into(), Vec::new(), Vec::new());
+    composer.sync_popups();
+    assert!(!composer.subagents_navigation_available(KeyCode::F(6).into()));
+}
+
+#[test]
 fn parent_owned_thread_allows_local_commands() {
     for (command, expected) in [
         ("/agent", SlashCommand::Agent),
