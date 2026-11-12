@@ -3,19 +3,19 @@ source: tui/src/app/tests.rs
 expression: "format!(\"Archived:\\n{archived_picker}\\nUnarchived:\\n{}\",\nrender_bottom_popup(&app.chat_widget,\n80)).replace(&archived_thread_id.to_string(), \"[archived]\")"
 ---
 Archived:
-  Subagents
-  Select an agent to watch. ⌥← previous, ⌥→ next.
+ Subagents · 0 running · 1–1 of 1
+ / Search:
+›● Main [default]              idle
 
+ Main [default] · 00000000-0000-0000-0000-000000000123
 
-› 1. • Main [default] (current)  00000000-0000-0000-0000-000000000123
-
-  enter select · esc back
+[enter View] [esc Close]
 Unarchived:
-  Subagents
-  Select an agent to watch. ⌥← previous, ⌥→ next.
+ Subagents · 0 running · 1–2 of 2
+ / Search:
+›● Main [default]              idle
+ ○ Missed archive [worker]     idle
 
+ Main [default] · 00000000-0000-0000-0000-000000000123
 
-› 1. • Main [default] (current)  00000000-0000-0000-0000-000000000123
-  2. • Missed archive [worker]   [archived]
-
-  enter select · esc back
+[enter View] [esc Close]
