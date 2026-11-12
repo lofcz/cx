@@ -1,9 +1,10 @@
 ---
 source: tui/src/app/tests.rs
-assertion_line: 2769
-expression: "render_bottom_popup(&app.chat_widget, 80)"
+expression: "normalize_snapshot_paths(render_bottom_popup(&app.chat_widget, 80))"
 ---
 › Ask CX to do anything
 
-  GPT-6.1-Sol default · /tmp/project · child-0 [worker]
-  ← for agents · ? for shortcuts
+  GPT-6.1-Sol default · /tmp/project · child-0 [worker] · ← for agents
+ 1 subagent · 0 running · F6 manage                                 [⇧F6 hide]
+ ○ Main [default]              idle
+ ● child-0 [worker]            idle  Saved work from child-0
