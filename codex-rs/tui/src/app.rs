@@ -68,7 +68,6 @@ use crate::model_catalog::ModelCatalog;
 use crate::model_migration::ModelMigrationOutcome;
 use crate::model_migration::migration_copy_for_models;
 use crate::model_migration::run_model_migration_prompt;
-use crate::multi_agents::agent_picker_status_dot_spans;
 use crate::multi_agents::format_agent_picker_item_name;
 use crate::multi_agents::next_agent_shortcut_matches;
 use crate::multi_agents::previous_agent_shortcut_matches;
@@ -210,6 +209,7 @@ pub(crate) mod agents_overview_discovery;
 mod agents_overview_threads;
 mod agents_overview_usage;
 mod agents_overview_view;
+mod subagents;
 pub(crate) use agents_overview::AGENTS_OVERVIEW_VIEW_ID;
 mod activity_groups;
 mod app_server_event_targets;
@@ -1303,6 +1303,12 @@ impl App {
             return Ok(AppRunControl::Continue);
         }
         self.cancel_primed_browsing_for_event(&event);
+        if self.overlay.is_none()
+            && let TuiEvent::Mouse(mouse) = &event
+            && self.chat_widget.handle_subagents_mouse(*mouse)
+        {
+            return Ok(AppRunControl::Continue);
+        }
         // Transcript interactions consume otherwise-unhandled keys; let enabled voice controls
         // reach App.
         if !matches!(&event, TuiEvent::Key(key)
