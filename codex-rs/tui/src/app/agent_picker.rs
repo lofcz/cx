@@ -15,7 +15,8 @@ use codex_app_server_protocol::ThreadSourceKind;
 use codex_app_server_protocol::ThreadStatus;
 use std::collections::HashSet;
 
-pub(super) const AGENT_PICKER_VIEW_ID: &str = "agent-picker";
+#[cfg(test)]
+pub(super) const AGENT_PICKER_VIEW_ID: &str = crate::bottom_pane::subagents::VIEW_ID;
 const AGENT_PICKER_PAGE_SIZE: u32 = 100;
 const AGENT_PICKER_MAX_THREADS: usize = 1_000;
 
@@ -206,6 +207,8 @@ impl App {
                 continue;
             };
             let sidebar_agent = self.confirm_sidebar_agent(root, thread_id);
+            self.agent_navigation
+                .observe_agent_snapshot(thread_id, &thread);
             if !completion.visibility_changed_threads.contains(&thread_id) {
                 self.update_agent_picker_thread_visibility(
                     thread_id,
@@ -359,15 +362,6 @@ impl App {
             .map(|id| self.thread_label(id))
             .collect();
         self.chat_widget.set_pending_thread_approvals(pending);
-        if !self.chat_widget.has_active_modal() {
-            return false;
-        }
-        let selected = self
-            .chat_widget
-            .selected_index_for_present_view(AGENT_PICKER_VIEW_ID)
-            .and_then(|index| self.agent_navigation.picker_row_ids.get(index).copied());
-        let params = self.agent_picker_selection_view_params(selected);
-        self.chat_widget
-            .replace_selection_view_if_present(AGENT_PICKER_VIEW_ID, params)
+        self.sync_subagents()
     }
 }
