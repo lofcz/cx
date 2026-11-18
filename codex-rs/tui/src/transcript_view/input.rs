@@ -129,6 +129,11 @@ impl TranscriptView {
             .map(ReaderLink::into_destination)
     }
 
+    pub(crate) fn pointer_destination(&self, column: u16, row: u16) -> Option<ReaderLink> {
+        let (_, link) = self.raw_link_at(ScreenPosition::new(column, row))?;
+        link.reader_destination(true)
+    }
+
     fn reader_link_at(&self, column: u16, row: u16) -> Option<ReaderLink> {
         let (_, link) = self.raw_link_at(ScreenPosition::new(column, row))?;
         link.reader_destination(self.document_links)
@@ -617,9 +622,9 @@ impl TranscriptView {
                 .modifiers
                 .intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER)
         {
-            return self
-                .reader_link_at(event.column, event.row)
-                .map(ViewAction::from);
+            // Modified document clicks are resolved by the app against the owning pane.
+            let (_, link) = self.raw_link_at(ScreenPosition::new(event.column, event.row))?;
+            return link.terminal_destination().map(ViewAction::OpenLink);
         }
         if event.modifiers == KeyModifiers::SHIFT && self.has_selection_range() {
             self.last_click = None;

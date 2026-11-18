@@ -334,6 +334,7 @@ impl App {
             hud.viewport = caller_inset;
         }
         prepared.floating_shortcuts = hud.is_some();
+        let tooltip = tui.link_hover.tooltip.clone();
         let mut painted = PaintedConversation::default();
         tui.draw_with_shortcut_hud(screen_size.height, hud, |frame| {
             if let Some(backdrop) = backdrop {
@@ -610,6 +611,9 @@ impl App {
                     .retain(|image| !area.intersects(image.area));
                 frame.cursor_position = None;
                 self.conversation_frame.close_buttons = buttons;
+            }
+            if let Some(tooltip) = &tooltip {
+                tooltip.paint(frame);
             }
             self.paint_centered_dialog(frame);
         })?;

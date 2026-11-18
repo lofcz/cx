@@ -94,9 +94,15 @@ enum State {
 }
 
 impl Document {
-    pub(super) fn link_at(&self, column: u16, row: u16) -> Option<String> {
+    pub(super) fn link_at(
+        &self,
+        column: u16,
+        row: u16,
+    ) -> Option<crate::terminal_hyperlinks::ReaderLink> {
         match &self.state {
-            State::Ready { view, .. } if !view.is_select_mode() => view.link_at(column, row),
+            State::Ready { view, .. } if !view.is_select_mode() => {
+                view.pointer_destination(column, row)
+            }
             _ => None,
         }
     }

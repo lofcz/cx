@@ -1152,6 +1152,11 @@ impl App {
         {
             return Ok(AppRunControl::Continue);
         }
+        if let TuiEvent::Mouse(mouse) = &event
+            && self.handle_link_gesture(tui, *mouse)
+        {
+            return Ok(AppRunControl::Continue);
+        }
         if !composer_paste && Box::pin(self.handle_sidebar_input(tui, app_server, &event)).await {
             return Ok(AppRunControl::Continue);
         }
@@ -1169,13 +1174,17 @@ impl App {
                 && painted.passive.union(painted.focused) == Rect::from(size)
             {
                 let painted_area = painted.passive;
-                if let Some(url) = self.transcript_link_at(*press) {
-                    if press.modifiers.is_empty() {
-                        self.passive_link_drag = Some((current.passive_thread, painted.passive));
-                        self.handle_passive_transcript_event(tui, current.passive_thread, &event);
-                    } else {
-                        self.open_url_in_browser(url);
-                    }
+                if press.modifiers.is_empty()
+                    && self
+                        .side_companions
+                        .get(&current.passive_thread)
+                        .is_some_and(|companion| {
+                            !companion.view.is_select_mode()
+                                && companion.view.link_at(press.column, press.row).is_some()
+                        })
+                {
+                    self.passive_link_drag = Some((current.passive_thread, painted.passive));
+                    self.handle_passive_transcript_event(tui, current.passive_thread, &event);
                     return Ok(AppRunControl::Continue);
                 }
                 if self.reconnect.offline {

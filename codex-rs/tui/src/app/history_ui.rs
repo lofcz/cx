@@ -294,6 +294,49 @@ impl App {
         self.insert_pending_usage_output(tui);
     }
 
+    pub(super) fn open_external_file(&self, path: codex_utils_path_uri::PathUri) {
+        use std::process::Stdio;
+        use tokio::process::Command;
+        #[cfg(windows)]
+        let mut command = {
+            let mut command = Command::new("rundll32.exe");
+            command
+                .arg("url.dll,FileProtocolHandler")
+                .arg(path.to_url().as_str());
+            command
+        };
+        #[cfg(not(windows))]
+        let mut command = {
+            let mut command = Command::new(if cfg!(target_os = "macos") {
+                "open"
+            } else {
+                "xdg-open"
+            });
+            command.arg(path.inferred_native_path_string());
+            command
+        };
+        let tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let status = command
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await;
+            let error = match status {
+                Ok(status) if status.success() => return,
+                Ok(status) => status.to_string(),
+                Err(error) => error.to_string(),
+            };
+            tx.send(crate::app_event::AppEvent::InsertHistoryCell(Box::new(
+                crate::history_cell::new_error_event(format!(
+                    "Could not open {}: {error}",
+                    path.inferred_native_path_string()
+                )),
+            )));
+        });
+    }
+
     pub(super) fn open_url_in_browser(&mut self, url: String) {
         if let Err(err) = webbrowser::open(&url) {
             self.chat_widget

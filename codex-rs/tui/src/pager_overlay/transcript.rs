@@ -33,6 +33,16 @@ pub(crate) struct TranscriptOverlay {
 }
 
 impl TranscriptOverlay {
+    pub(crate) fn pointer_destination(
+        &self,
+        mouse: crossterm::event::MouseEvent,
+    ) -> Option<crate::terminal_hyperlinks::ReaderLink> {
+        if self.view.is_select_mode() {
+            return None;
+        }
+        self.view.pointer_destination(mouse.column, mouse.row)
+    }
+
     pub(crate) fn bookmark(&mut self) -> TranscriptBookmark {
         self.view.bookmark(&self.cells)
     }
@@ -163,11 +173,15 @@ impl TranscriptOverlay {
     }
 
     pub(crate) fn draw(&mut self, tui: &mut tui::Tui) -> Result<()> {
+        let tooltip = tui.link_hover.tooltip.clone();
         let mut scanning = false;
         tui.draw(u16::MAX, |frame| {
             self.view.prepare_width(frame.area().width);
             scanning = self.view.advance_search(&self.cells);
             self.render(frame.area(), frame.buffer);
+            if let Some(tooltip) = &tooltip {
+                tooltip.paint(frame);
+            }
             if let Some(cursor) = self.cursor {
                 frame.set_cursor_position(cursor);
             }

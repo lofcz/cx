@@ -112,13 +112,6 @@ pub(super) struct SidebarPane {
 }
 
 impl SidebarPane {
-    pub(super) fn visible_link_at(&self, column: u16, row: u16) -> Option<String> {
-        let SidebarContent::Document(id) = self.visible_content()? else {
-            return None;
-        };
-        self.documents.get(&id)?.link_at(column, row)
-    }
-
     pub(super) fn finish_document_copy(
         &mut self,
         completion: &(u64, crate::clipboard_copy::worker::CopyResult),
