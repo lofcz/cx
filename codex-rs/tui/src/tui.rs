@@ -73,6 +73,7 @@ mod input_boundary;
 mod job_control;
 mod keyboard_modes;
 mod link_pointer;
+pub(crate) use link_pointer::LinkTooltip;
 pub(crate) use link_pointer::PointerShape;
 #[cfg(test)]
 #[path = "tui/inline_image_history_tests.rs"]

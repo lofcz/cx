@@ -6,6 +6,9 @@ Both projects use the Apache-2.0 license. Their existing license and notices rem
 
 - Press **Ctrl+Shift+C** to copy the composer draft, including pending pasted text. The shortcut keeps the draft intact.
   Empty drafts do not interrupt work. Terminals that intercept the shortcut must pass it through to CX.
+- Hover over a transcript or sidebar link to see its destination. **Right-click** copies the full path or URL.
+  Click a file link to preview it in the sidebar. **Ctrl+click** opens a local file in its desktop default application.
+  Konsole uses Sixel graphics for sidebar image previews.
 - Press **Ctrl+R** in the session picker to rename the selected session. Press **Enter** to save or **Esc** to cancel.
   Archived sessions remain read-only. Existing list key bindings take precedence.
 - Press **Shift+Up/Down** to select prompt rows. **Shift+Left/Right/Home/End** also extends the selection.
