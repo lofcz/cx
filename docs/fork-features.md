@@ -123,3 +123,18 @@ git commit -m 'chore: update Codex++ base'
 Resolve conflicts and run the fork checks before updating the main branch with `--force-with-lease`.
 The inherited automatic rebase runs only in the parent repository.
 CX uses its separate daily workflow and Gateway secret.
+
+## Voice dictation
+
+Hold **Alt+W** in the composer to record from the default microphone. Release **W** to transcribe, or press **Enter** if your terminal does not report key releases. **Esc** discards a recording. The final text goes at the cursor and remains editable before sending.
+
+Open `/voice` to change the Soniox model. The same setting in `config.toml` is:
+
+```toml
+[tui]
+dictation_model = "stt-async-v6"
+```
+
+Set `SONIOX_API_KEY` or store the key in `soniox.key` in your Codex home (normally `~/.codex`, with file mode 0600 on Unix). The key needs Soniox file and async transcription access. CX sends the completed recording on release and requests deletion of the uploaded file and transcription after processing.
+
+Linux can record with `parec` or `arecord`. macOS supports SoX or FFmpeg. Windows uses SoX. F8 controls the separate realtime voice call.

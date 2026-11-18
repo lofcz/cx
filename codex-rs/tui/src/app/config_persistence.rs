@@ -1204,6 +1204,33 @@ impl App {
         false
     }
 
+    pub(super) async fn save_dictation_model(&mut self, model: String) {
+        if model.is_empty() || model.len() > 32 || model.chars().any(char::is_whitespace) {
+            self.chat_widget
+                .add_error_message("Enter a Soniox model ID of up to 32 characters.".into());
+            return;
+        }
+        let edit = crate::legacy_core::config::edit::ConfigEdit::SetPath {
+            segments: vec!["tui".into(), "dictation_model".into()],
+            value: toml_edit::value(model.as_str()),
+        };
+        match ConfigEditsBuilder::for_config_path(self.local_settings.user_config_path.as_path())
+            .with_edits([edit])
+            .apply()
+            .await
+        {
+            Ok(()) => {
+                self.local_settings.tui.dictation_model = Some(model.clone());
+                self.chat_widget.local_settings.tui.dictation_model = Some(model);
+                self.chat_widget
+                    .add_info_message("Voice dictation settings saved.".into(), None);
+            }
+            Err(err) => self
+                .chat_widget
+                .add_error_message(format!("Could not save dictation settings: {err}")),
+        }
+    }
+
     pub(super) fn sync_tui_theme_selection(&mut self, name: String) {
         self.local_settings.tui.theme = Some(name.clone());
         self.chat_widget.set_tui_theme(Some(name));

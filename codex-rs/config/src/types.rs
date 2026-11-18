@@ -874,6 +874,9 @@ impl QuickDial {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Tui {
+    /// Soniox asynchronous model for voice dictation. Defaults to stt-async-v6.
+    pub dictation_model: Option<String>,
+
     /// Show a compact model, directory, Git, and quota header above the composer.
     #[serde(default)]
     pub status_header: bool,
