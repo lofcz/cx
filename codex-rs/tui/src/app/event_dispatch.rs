@@ -1724,6 +1724,7 @@ impl App {
                     self.chat_widget.show_security_setup(identity, notice);
                 }
             }
+            AppEvent::OpenExternalFile(path) => self.open_external_file(path),
             AppEvent::OpenUrlInBrowser { url } => {
                 self.open_url_in_browser(url);
             }
