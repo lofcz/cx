@@ -911,6 +911,20 @@ impl App {
         crate::markdown_render::preferences::set_document_links(
             self.transcript_view.document_links,
         );
+        let composer_available = self.overlay.is_none()
+            && !self.key_chord_matcher.is_pending()
+            && !(tui.is_owned_screen()
+                && (self.transcript_view.is_select_mode()
+                    || self.transcript_view.is_search_editing()))
+            && !self.reconnect.offline
+            && !self.focused_sidebar_chooser(tui)
+            && self.chat_widget.no_modal_or_popup_active();
+        if self
+            .chat_widget
+            .handle_dictation_event(&event, composer_available)
+        {
+            return Ok(AppRunControl::Continue);
+        }
         self.transcript_view
             .sync_patch_approval(self.chat_widget.current_patch_approval());
         // A chooser action must never decide a modal that has not been painted yet.
