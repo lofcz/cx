@@ -29,6 +29,48 @@ pub(crate) struct LinkHover {
     pub(crate) mouse: Option<MouseEvent>,
     pub(crate) shape: PointerShape,
     pub(crate) sidebar_divider: bool,
+    pub(crate) tooltip: Option<LinkTooltip>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct LinkTooltip {
+    pub(crate) point: Position,
+    pub(crate) destination: String,
+}
+
+impl LinkTooltip {
+    pub(crate) fn paint(&self, frame: &mut crate::custom_terminal::Frame<'_>) {
+        use ratatui::layout::Rect;
+        use ratatui::style::Stylize;
+        use ratatui::widgets::{Clear, Paragraph, Widget, Wrap};
+        let point = self.point;
+        let area = frame.area();
+        if !area.contains(point) || area.height < 3 {
+            return;
+        }
+        let text = format!("{}\nRight-click to copy", self.destination);
+        let paragraph = Paragraph::new(text).wrap(Wrap { trim: false }).reversed();
+        let width = area
+            .width
+            .min(u16::try_from(paragraph.line_width()).unwrap_or(u16::MAX))
+            .max(1);
+        let below = area.bottom() - point.y - 1;
+        let above = point.y - area.y;
+        let height = u16::try_from(paragraph.line_count(width))
+            .unwrap_or(u16::MAX)
+            .min(above.max(below));
+        let y = if below >= height {
+            point.y + 1
+        } else {
+            point.y - height
+        };
+        let rect = Rect::new(point.x.min(area.right() - width), y, width, height);
+        Clear.render(rect, frame.buffer);
+        paragraph.render(rect, frame.buffer);
+        frame
+            .image_placements
+            .retain(|image| !image.area.intersects(rect));
+    }
 }
 
 impl LinkHover {

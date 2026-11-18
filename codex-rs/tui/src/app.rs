@@ -1232,6 +1232,11 @@ impl App {
         {
             return Ok(AppRunControl::Continue);
         }
+        if let TuiEvent::Mouse(mouse) = &event
+            && self.handle_link_gesture(tui, *mouse)
+        {
+            return Ok(AppRunControl::Continue);
+        }
         if !composer_paste && Box::pin(self.handle_sidebar_input(tui, app_server, &event)).await {
             return Ok(AppRunControl::Continue);
         }

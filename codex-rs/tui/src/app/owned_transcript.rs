@@ -458,6 +458,7 @@ impl App {
         prepared.floating_shortcuts = hud.is_some();
         let virtual_pet =
             preserve_pet && tui.terminal.virtual_image_base.is_some() && hud.is_none();
+        let tooltip = tui.link_hover.tooltip.clone();
         let mut painted = PaintedConversation::default();
         self.chat_widget.begin_steer_hint_draw();
         tui.draw_with_shortcut_hud(screen_size.height, hud, |frame| {
@@ -804,6 +805,9 @@ impl App {
                         highlight_center,
                     );
                 }
+            }
+            if let Some(tooltip) = &tooltip {
+                tooltip.paint(frame);
             }
             self.paint_centered_dialog(frame);
             if virtual_pet

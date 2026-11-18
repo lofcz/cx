@@ -173,6 +173,25 @@ impl App {
                     None
                 };
                 tui.frame_requester().schedule_frame();
+                if mouse
+                    .modifiers
+                    .intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER)
+                    && candidate.is_some_and(|press| match press.target {
+                        SidebarTarget::Row(index) => self
+                            .sidebar()
+                            .is_some_and(|pane| pane.chat_tabs().file(index).is_some()),
+                        SidebarTarget::Tab(
+                            TabTarget::Tab(SidebarTab::Document(_))
+                            | TabTarget::Overflow {
+                                tab: SidebarTab::Document(_),
+                                ..
+                            },
+                        ) => true,
+                        _ => false,
+                    })
+                {
+                    return PointerResult::Consumed;
+                }
                 if down {
                     self.sidebar_press = candidate;
                     if button == MouseButton::Left
