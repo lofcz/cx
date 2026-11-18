@@ -2,7 +2,6 @@
 #![cfg(not(windows))]
 
 use super::*;
-use crate::app::owned_transcript::tests::attach_thread;
 use crate::app::test_support::enable_side_retention;
 use crate::app::test_support::side_frame;
 use crate::app::tests::make_test_app_with_channels;
@@ -40,8 +39,9 @@ async fn document_preview_scenario() -> Result<()> {
     app.config.cwd =
         codex_utils_absolute_path::AbsolutePathBuf::try_from(dir.path().canonicalize()?)?;
     let mut server = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
-    let parent = server.start_thread(&app.config).await?.session.thread_id;
-    attach_thread(&mut app, parent);
+    let session = server.start_thread(&app.config).await?.session;
+    let parent = session.thread_id;
+    app.chat_widget.handle_thread_session(session);
     app.transcript_cells = vec![Arc::new(AgentMarkdownCell::new(
         "[Guide](./guide.md)".into(),
         dir.path(),
@@ -101,6 +101,43 @@ async fn document_preview_scenario() -> Result<()> {
         kind: MouseEventKind::Up(MouseButton::Left),
         ..press
     };
+    let full_path = dir.path().join("guide.md");
+    let hover = MouseEvent {
+        kind: MouseEventKind::Moved,
+        ..press
+    };
+    Box::pin(app.handle_tui_event(&mut tui, &mut server, TuiEvent::Mouse(hover))).await?;
+    let hovered = side_frame(&mut app, &mut tui, size)?;
+    assert!(hovered.contains(full_path.to_str().unwrap()), "{hovered}");
+    assert!(hovered.contains("Right-click to copy"), "{hovered}");
+    let copy = MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Right),
+        ..press
+    };
+    Box::pin(app.handle_tui_event(&mut tui, &mut server, TuiEvent::Mouse(copy))).await?;
+    assert!(
+        std::iter::from_fn(|| events.try_recv().ok()).any(|event| matches!(event,
+        AppEvent::CopySelection { text, .. } if text.as_ref() == full_path.to_string_lossy()))
+    );
+    let modified = MouseEvent {
+        modifiers: KeyModifiers::CONTROL,
+        ..press
+    };
+    for mouse in [modified, release] {
+        Box::pin(app.handle_tui_event(&mut tui, &mut server, TuiEvent::Mouse(mouse))).await?;
+    }
+    let actions = std::iter::from_fn(|| events.try_recv().ok()).collect::<Vec<_>>();
+    assert!(
+        actions
+            .iter()
+            .any(|event| matches!(event, AppEvent::OpenExternalFile(path)
+        if path.inferred_native_path_string() == full_path.to_string_lossy()))
+    );
+    assert!(
+        !actions
+            .iter()
+            .any(|event| matches!(event, AppEvent::OpenSidebarDocument { .. }))
+    );
     for mouse in [press, release] {
         Box::pin(app.handle_tui_event(&mut tui, &mut server, TuiEvent::Mouse(mouse))).await?;
     }

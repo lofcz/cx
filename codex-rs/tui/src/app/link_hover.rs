@@ -3,9 +3,13 @@
 //! Keep passive link drags with their original view.
 
 use codex_protocol::ThreadId;
+use codex_utils_path_uri::LegacyAppPathString;
+use codex_utils_path_uri::PathUri;
 use crossterm::event::KeyModifiers;
 use crossterm::event::MouseButton::Left;
+use crossterm::event::MouseButton::Right;
 use crossterm::event::MouseEvent;
+use crossterm::event::MouseEventKind::Down;
 use crossterm::event::MouseEventKind::Drag;
 use crossterm::event::MouseEventKind::Moved;
 use crossterm::event::MouseEventKind::ScrollDown;
@@ -20,13 +24,49 @@ use ratatui::style::Modifier;
 
 use super::App;
 use super::side_companion::SideCompanion;
+use super::side_focus::SidebarTarget;
+use super::sidebar::SidebarContent;
 use crate::app_event::AppEvent;
 use crate::custom_terminal::osc8_hyperlink_parts;
+use crate::pager_overlay::Overlay;
+use crate::sidebar_tab_strip::SidebarTab;
+use crate::sidebar_tab_strip::TabTarget;
 use crate::terminal_hyperlinks::ReaderLink;
 use crate::transcript_view::ViewAction;
+use crate::tui::LinkTooltip;
 use crate::tui::PointerShape;
 use crate::tui::Tui;
 use crate::tui::TuiEvent;
+
+enum Destination {
+    Web(String),
+    File(PathUri),
+}
+
+impl Destination {
+    fn resolve(link: ReaderLink, base: &PathUri) -> Option<Self> {
+        match link {
+            ReaderLink::Document(link) => {
+                let path = LegacyAppPathString::from_string(link.path)
+                    .resolve_against(base, None)
+                    .ok()?;
+                (!path.to_url().has_host()).then_some(Self::File(path))
+            }
+            ReaderLink::External(url) if url.starts_with("file:") => {
+                PathUri::parse(&url).ok().map(Self::File)
+            }
+            ReaderLink::External(url) => Some(Self::Web(url)),
+            ReaderLink::Agent(_) => None,
+        }
+    }
+
+    fn text(&self) -> String {
+        match self {
+            Self::Web(url) => url.clone(),
+            Self::File(path) => path.inferred_native_path_string(),
+        }
+    }
+}
 
 impl App {
     pub(super) fn observe_pointer(&self, tui: &mut Tui, event: &TuiEvent) {
@@ -130,6 +170,126 @@ impl App {
             &self.transcript_view
         };
         view.reader_link_at(mouse.column, mouse.row)
+    }
+
+    fn link_input_available(&self, tui: &Tui, mouse: MouseEvent) -> bool {
+        if tui.shortcut_hud_contains(mouse) {
+            return false;
+        }
+        match &self.overlay {
+            Some(Overlay::Transcript(_)) => true,
+            Some(_) => false,
+            None => {
+                tui.is_owned_screen()
+                    && (self.chat_widget.no_modal_or_popup_active()
+                        || self.focused_sidebar_chooser(tui))
+                    && self.sidebar().is_none_or(|pane| pane.close.is_none())
+                    && self.divider_drag.is_none()
+                    && self.pane_resize.is_none()
+            }
+        }
+    }
+
+    fn pointer_destination(&self, mouse: MouseEvent) -> Option<Destination> {
+        if let Some(Overlay::Transcript(overlay)) = &self.overlay {
+            return Destination::resolve(
+                overlay.pointer_destination(mouse)?,
+                &PathUri::from_abs_path(&self.chat_widget.config_ref().cwd),
+            );
+        }
+        let point = (mouse.column, mouse.row).into();
+        let frame = &self.conversation_frame;
+        if let Some(target) = self.hovered_sidebar_target(Some(point)) {
+            let pane = self.sidebar()?;
+            if frame.sidebar_input != Some(pane.input_state()) {
+                return None;
+            }
+            return match target {
+                SidebarTarget::Row(index) => {
+                    let file = pane.chat_tabs().file(index)?.clone();
+                    Destination::resolve(
+                        ReaderLink::Document(file),
+                        pane.files.as_ref()?.cwd.as_ref()?,
+                    )
+                }
+                SidebarTarget::Tab(
+                    TabTarget::Tab(SidebarTab::Document(id))
+                    | TabTarget::Overflow {
+                        tab: SidebarTab::Document(id),
+                        ..
+                    },
+                ) => Some(Destination::File(pane.documents.get(&id)?.path.clone())),
+                _ => None,
+            };
+        }
+        if frame.panel_area().is_some_and(|area| area.contains(point)) {
+            let pane = self.sidebar()?;
+            let SidebarContent::Document(id) = pane.visible_content()? else {
+                return None;
+            };
+            let doc = pane.documents.get(&id)?;
+            return Destination::resolve(
+                doc.link_at(mouse.column, mouse.row)?,
+                &doc.path.parent()?,
+            );
+        }
+        let (view, cwd) = if let Some(panes) = frame.side_pane()
+            && panes.passive.contains(point)
+        {
+            let companion = self.side_companions.get(&panes.passive_thread)?;
+            (
+                &companion.view,
+                PathUri::from_host_native_path(&companion.display.cwd).ok()?,
+            )
+        } else {
+            (
+                &self.transcript_view,
+                PathUri::from_abs_path(&self.chat_widget.config_ref().cwd),
+            )
+        };
+        if view.is_select_mode() {
+            return None;
+        }
+        Destination::resolve(view.pointer_destination(mouse.column, mouse.row)?, &cwd)
+    }
+
+    pub(super) fn handle_link_gesture(&mut self, tui: &mut Tui, mouse: MouseEvent) -> bool {
+        let copy = mouse.kind == Down(Right) && mouse.modifiers.is_empty();
+        let open = mouse.kind == Down(Left)
+            && mouse
+                .modifiers
+                .intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER);
+        if !(copy || open) || !self.link_input_available(tui, mouse) {
+            return false;
+        }
+        let Some(destination) = self.pointer_destination(mouse) else {
+            return false;
+        };
+        let tx = &self.app_event_tx;
+        if copy {
+            tx.send(AppEvent::CopySelection {
+                text: destination.text().into(),
+                label: "link destination".into(),
+                format: crate::clipboard_copy::CopyFormat::PlainText,
+            });
+        } else {
+            match destination {
+                Destination::Web(url) => self.open_url_in_browser(url),
+                Destination::File(path) => {
+                    if crate::uses_remote_workspace_or_environment(
+                        &self.app_server_target,
+                        &self.environment_manager,
+                    ) {
+                        self.chat_widget.add_error_message(
+                            "This file belongs to a remote workspace. Right-click to copy its path.".into(),
+                        );
+                    } else {
+                        tx.send(AppEvent::OpenExternalFile(path));
+                    }
+                }
+            }
+        }
+        true
     }
 
     pub(super) fn handle_passive_transcript_event(
@@ -237,6 +397,27 @@ impl App {
     pub(super) fn refresh_link_hover(&self, tui: &mut Tui) -> std::io::Result<()> {
         let viewport = tui.terminal.last_known_screen_size.into();
         let mut sidebar_divider = false;
+        let tooltip = tui
+            .link_hover
+            .mouse
+            .filter(|mouse| {
+                mouse.kind == Moved
+                    && self.link_input_available(tui, *mouse)
+                    && (mouse.modifiers.is_empty()
+                        || mouse
+                            .modifiers
+                            .intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER))
+            })
+            .and_then(|mouse| {
+                Some(LinkTooltip {
+                    point: Position::new(mouse.column, mouse.row),
+                    destination: self.pointer_destination(mouse)?.text(),
+                })
+            });
+        if tooltip != tui.link_hover.tooltip {
+            tui.link_hover.tooltip = tooltip;
+            tui.frame_requester().schedule_frame();
+        }
         let shape = if tui
             .link_hover
             .mouse
@@ -266,12 +447,7 @@ impl App {
             })
         {
             PointerShape::Resize
-        } else if self.chat_widget.no_modal_or_popup_active()
-            && tui
-                .link_hover
-                .mouse
-                .is_some_and(|mouse| self.transcript_link_at(mouse).is_some())
-        {
+        } else if tui.link_hover.tooltip.is_some() {
             PointerShape::Link
         } else {
             PointerShape::Default
