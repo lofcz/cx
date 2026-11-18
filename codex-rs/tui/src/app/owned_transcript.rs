@@ -359,6 +359,7 @@ impl App {
             hud.viewport = caller_inset;
         }
         prepared.floating_shortcuts = hud.is_some();
+        let tooltip = tui.link_hover.tooltip.clone();
         let mut painted = PaintedConversation::default();
         self.chat_widget.begin_steer_hint_draw();
         tui.draw_with_shortcut_hud(screen_size.height, hud, |frame| {
@@ -652,6 +653,9 @@ impl App {
             }
             if let Some(center) = center {
                 self.paint_command_center(frame, center, available, &frames);
+            }
+            if let Some(tooltip) = &tooltip {
+                tooltip.paint(frame);
             }
             self.paint_centered_dialog(frame);
         })?;
