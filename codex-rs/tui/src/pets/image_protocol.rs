@@ -195,8 +195,10 @@ fn supports_kitty_graphics(info: &TerminalInfo) -> bool {
 }
 
 fn supports_sixel(info: &TerminalInfo) -> bool {
-    matches!(info.name, TerminalName::WindowsTerminal)
-        || terminal_field_contains(info.term.as_deref(), "sixel")
+    matches!(
+        info.name,
+        TerminalName::WindowsTerminal | TerminalName::Konsole
+    ) || terminal_field_contains(info.term.as_deref(), "sixel")
         || terminal_field_contains(info.term.as_deref(), "mlterm")
         || terminal_field_contains(info.term.as_deref(), "foot")
 }
@@ -608,6 +610,7 @@ mod tests {
     #[test]
     fn pet_image_support_detects_sixel_terminals() {
         for info in [
+            terminal_info_for_test(TerminalName::Konsole, None, None, Some("xterm-256color")),
             terminal_info_for_test(
                 TerminalName::Unknown,
                 /*multiplexer*/ None,
