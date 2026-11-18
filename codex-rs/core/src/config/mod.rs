@@ -904,6 +904,9 @@ pub struct Config {
     /// message when blocked on the user.
     pub tui_terminal_title: Option<Vec<String>>,
 
+    /// Soniox asynchronous model override for voice dictation.
+    pub tui_dictation_model: Option<String>,
+
     /// Syntax highlighting theme override (kebab-case name).
     pub tui_theme: Option<String>,
 
@@ -5039,6 +5042,7 @@ impl Config {
                 .map(|t| t.status_line_use_colors)
                 .unwrap_or(true),
             tui_terminal_title: cfg.tui.as_ref().and_then(|t| t.terminal_title.clone()),
+            tui_dictation_model: cfg.tui.as_ref().and_then(|t| t.dictation_model.clone()),
             tui_theme: cfg.tui.as_ref().and_then(|t| t.theme.clone()),
             tui_pet: cfg.tui.as_ref().and_then(|t| t.pet.clone()),
             tui_pet_anchor: cfg

@@ -119,6 +119,7 @@ impl ChatWidget {
         self.bottom_pane
             .set_queue_submissions(/*queue_submissions*/ false);
         if previous_thread_id != self.thread_id {
+            self.dictation = None;
             if (previous_thread_id.is_some() || self.config.cwd != session.cwd)
                 && self.status_account_display == Some(StatusAccountDisplay::ApiKey)
             {

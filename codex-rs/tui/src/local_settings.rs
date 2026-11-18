@@ -90,6 +90,7 @@ impl LocalSettings {
                 status_line_provider: config.tui_status_line_provider.clone(),
                 status_line_use_colors: config.tui_status_line_use_colors,
                 terminal_title: config.tui_terminal_title.clone(),
+                dictation_model: config.tui_dictation_model.clone(),
                 theme: config.tui_theme.clone(),
                 pet: config.tui_pet.clone(),
                 pet_anchor: config.tui_pet_anchor,

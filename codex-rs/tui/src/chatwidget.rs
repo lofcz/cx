@@ -360,6 +360,7 @@ mod recap;
 mod reset_credits;
 pub(crate) use self::rate_limits::limit_label_for_window;
 mod completion;
+mod dictation;
 mod realtime;
 mod realtime_settings;
 mod realtime_split_flap;
@@ -662,6 +663,7 @@ pub(crate) struct ChatWidget {
     turn_lifecycle: TurnLifecycleState,
     safety_recourse: Option<safety_recourse::PendingRecourse>,
     realtime_conversation: RealtimeConversationUiState,
+    dictation: Option<dictation::Dictation>,
     realtime_conversation_available_for_thread: bool,
     safety_buffering: SafetyBufferingState,
     task_complete_pending: bool,

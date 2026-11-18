@@ -217,6 +217,7 @@ impl ChatWidget {
             turn_lifecycle: TurnLifecycleState::new(prevent_idle_sleep),
             safety_recourse: None,
             realtime_conversation: RealtimeConversationUiState::default(),
+            dictation: None,
             realtime_conversation_available_for_thread: false,
             safety_buffering: SafetyBufferingState::default(),
             task_complete_pending: false,
