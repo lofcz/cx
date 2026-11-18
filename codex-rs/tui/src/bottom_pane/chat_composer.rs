@@ -9658,13 +9658,13 @@ mod tests {
     #[test]
     fn dynamic_slash_command_becomes_editable_and_is_not_exported() {
         let (mut composer, _rx) = new_test_composer();
-        composer.set_voice_command_enabled(/*enabled*/ true);
-        type_chars_humanlike(&mut composer, &['/', 'v', 'o', 'i', 'c', 'e', ' ']);
+        composer.set_goal_command_enabled(/*enabled*/ true);
+        type_chars_humanlike(&mut composer, &['/', 'g', 'o', 'a', 'l', ' ']);
         assert_eq!(composer.draft.textarea.text_elements().len(), 1);
 
-        composer.set_voice_command_enabled(/*enabled*/ false);
+        composer.set_goal_command_enabled(/*enabled*/ false);
 
-        assert_eq!(composer.current_text(), "/voice ");
+        assert_eq!(composer.current_text(), "/goal ");
         assert!(composer.draft.textarea.text_elements().is_empty());
         assert!(composer.text_elements().is_empty());
     }
