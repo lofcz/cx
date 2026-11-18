@@ -378,7 +378,9 @@ impl ChatWidget {
         if let Some(dictation) = &self.dictation
             && self.no_modal_or_popup_active()
         {
-            RenderableItem::Owned(Box::new(dictation.panel(self.local_settings.tui.animations)))
+            RenderableItem::Owned(Box::new(
+                dictation.panel(self.local_settings.tui.animations),
+            ))
         } else if self.fork_in_progress {
             RenderableItem::Owned(Box::new(
                 Paragraph::new("Forking conversation…".dim()).inset(Insets::tlbr(
