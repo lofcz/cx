@@ -421,56 +421,48 @@ async fn direct_reset_preserves_both_partial_speakers_for_replay() {
 
 #[tokio::test]
 async fn stopping_voice_preserves_the_live_transcript_once() {
-    for command in ["/voice", "/voice stop"] {
-        let (mut chat, _sender, mut events, _ops) = make_chatwidget_manual_with_sender().await;
-        chat.local_settings.tui.animations = true;
-        activate_voice(&mut chat);
-        chat.on_realtime_transcript_done("user".to_string(), "Earlier question".to_string());
-        chat.on_realtime_transcript_done("assistant".to_string(), "Earlier answer".to_string());
-        chat.on_realtime_transcript_delta("assistant".to_string(), "Answer in ".to_string());
-        chat.on_realtime_transcript_delta("assistant".to_string(), "progress".to_string());
+    let (mut chat, _sender, mut events, _ops) = make_chatwidget_manual_with_sender().await;
+    chat.local_settings.tui.animations = true;
+    activate_voice(&mut chat);
+    chat.on_realtime_transcript_done("user".to_string(), "Earlier question".to_string());
+    chat.on_realtime_transcript_done("assistant".to_string(), "Earlier answer".to_string());
+    chat.on_realtime_transcript_delta("assistant".to_string(), "Answer in ".to_string());
+    chat.on_realtime_transcript_delta("assistant".to_string(), "progress".to_string());
 
-        if command == "/voice" {
-            chat.handle_slash_command_dispatch(crate::slash_command::SlashCommand::Voice);
-        } else {
-            chat.handle_slash_command_with_args_dispatch(
-                crate::slash_command::SlashCommand::Voice,
-                "stop".to_string(),
-                Vec::new(),
+    chat.handle_slash_command_with_args_dispatch(
+        crate::slash_command::SlashCommand::Voice,
+        "stop".to_string(),
+        Vec::new(),
+    );
+    chat.on_realtime_transcript_done("assistant".to_string(), "Answer in progress".to_string());
+    chat.on_realtime_conversation_closed(/*reason*/ None);
+    chat.stop_realtime_conversation();
+
+    assert_eq!(
+        chat.realtime_conversation.phase,
+        RealtimeConversationPhase::Inactive
+    );
+    commit_realtime_history_events(&mut chat, &mut events);
+    assert!(chat.active_cell_transcript_key().is_none());
+    let mut rendered = Vec::new();
+    commit_realtime_history_events(&mut chat, &mut events);
+    while let Ok(event) = events.try_recv() {
+        if let AppEvent::InsertHistoryCell(cell) = event {
+            assert!(cell.transcript_animation_tick().is_none());
+            rendered.extend(
+                cell.display_lines(/*width*/ 80)
+                    .into_iter()
+                    .map(|line| line.to_string()),
             );
         }
-        chat.on_realtime_transcript_done("assistant".to_string(), "Answer in progress".to_string());
-        chat.on_realtime_conversation_closed(/*reason*/ None);
-        chat.stop_realtime_conversation();
-
-        assert_eq!(
-            chat.realtime_conversation.phase,
-            RealtimeConversationPhase::Inactive
-        );
-        commit_realtime_history_events(&mut chat, &mut events);
-        assert!(chat.active_cell_transcript_key().is_none());
-        let mut rendered = Vec::new();
-        commit_realtime_history_events(&mut chat, &mut events);
-        while let Ok(event) = events.try_recv() {
-            if let AppEvent::InsertHistoryCell(cell) = event {
-                assert!(cell.transcript_animation_tick().is_none());
-                rendered.extend(
-                    cell.display_lines(/*width*/ 80)
-                        .into_iter()
-                        .map(|line| line.to_string()),
-                );
-            }
-        }
-        insta::allow_duplicates! {
-            insta::assert_snapshot!(rendered.join("\n"), @r"
-
-            › Earlier question
-
-            • Earlier answer
-            • Answer in progress
-            ");
-        }
     }
+    insta::assert_snapshot!(rendered.join("\n"), @r"
+
+    › Earlier question
+
+    • Earlier answer
+    • Answer in progress
+    ");
 }
 
 #[tokio::test]

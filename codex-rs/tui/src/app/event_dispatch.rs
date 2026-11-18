@@ -3345,6 +3345,7 @@ impl App {
                 }
                 self.chat_widget.on_plugin_mentions_loaded(plugins);
             }
+            AppEvent::SaveDictationModel(model) => self.save_dictation_model(model).await,
             AppEvent::OpenRealtimeSettings => self.chat_widget.open_realtime_settings(),
             AppEvent::OpenRealtimeSoundDevices => self.chat_widget.open_realtime_sound_devices(),
             AppEvent::OpenRealtimeVoices => self.open_realtime_voices(app_server).await,
