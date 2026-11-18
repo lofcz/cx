@@ -7,7 +7,7 @@ use crate::app_event::AppEvent;
 use crate::tui::TuiEvent;
 use anyhow::{Context, Result};
 use capture::Capture;
-use crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::style::{Color, Stylize};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Paragraph, Wrap};
@@ -15,9 +15,42 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 use tokio::sync::oneshot;
 
+/// Some terminals emit Release followed by Repeat (or another modified Press)
+/// for each keyboard repeat. Commit the release only after the pair can arrive.
+#[derive(Default)]
+pub(super) struct DictationHold {
+    released_at: Option<Instant>,
+}
+
+impl DictationHold {
+    const RELEASE_GRACE: Duration = Duration::from_millis(90);
+
+    fn observe(&mut self, key: KeyEvent, now: Instant) {
+        if key.code != KeyCode::Char('w') {
+            return;
+        }
+        match key.kind {
+            KeyEventKind::Release => {
+                self.released_at.get_or_insert(now);
+            }
+            KeyEventKind::Repeat => self.released_at = None,
+            KeyEventKind::Press if key.modifiers.contains(KeyModifiers::ALT) => {
+                self.released_at = None
+            }
+            _ => {}
+        }
+    }
+
+    fn released(&self, now: Instant) -> bool {
+        self.released_at
+            .is_some_and(|at| now.duration_since(at) >= Self::RELEASE_GRACE)
+    }
+}
+
 pub(super) enum Dictation {
     Recording {
         capture: Capture,
+        hold: DictationHold,
         start: Instant,
     },
     Processing {
@@ -29,7 +62,7 @@ pub(super) enum Dictation {
 impl Dictation {
     pub(super) fn panel(&self, animate: bool) -> Paragraph<'static> {
         let (label, hint, accent, indicator, elapsed) = match self {
-            Self::Recording { capture, start } => {
+            Self::Recording { capture, start, .. } => {
                 let level = (capture.level.load(Ordering::Relaxed) as f32 / 32768.0).sqrt();
                 let bars = (level * 12.0).round() as usize;
                 (
@@ -128,6 +161,7 @@ impl ChatWidget {
                     Ok(capture) => {
                         self.dictation = Some(Dictation::Recording {
                             capture,
+                            hold: DictationHold::default(),
                             start: Instant::now(),
                         })
                     }
@@ -150,19 +184,29 @@ impl ChatWidget {
             TuiEvent::Key(key) => {
                 if key.kind == KeyEventKind::Press && key.code == KeyCode::Esc {
                     self.dictation = None;
-                } else if (key.code == KeyCode::Char('w') && key.kind == KeyEventKind::Release
-                    || key.code == KeyCode::Enter && key.kind == KeyEventKind::Press)
-                    && matches!(self.dictation, Some(Dictation::Recording { .. }))
-                {
-                    self.finish_dictation();
+                } else if let Some(Dictation::Recording { hold, .. }) = self.dictation.as_mut() {
+                    if key.code == KeyCode::Enter && key.kind == KeyEventKind::Press {
+                        self.finish_dictation();
+                    } else {
+                        hold.observe(*key, Instant::now());
+                        if hold.released_at.is_some() {
+                            self.frame_requester
+                                .schedule_frame_in(DictationHold::RELEASE_GRACE);
+                        }
+                    }
                 }
                 self.frame_requester.schedule_frame();
                 true
             }
             TuiEvent::Mouse(_) | TuiEvent::Paste(_) => true,
             TuiEvent::Draw => {
+                if let Some(Dictation::Recording { hold, .. }) = &self.dictation
+                    && hold.released(Instant::now())
+                {
+                    self.finish_dictation();
+                }
                 let outcome = match self.dictation.as_mut() {
-                    Some(Dictation::Recording { capture, start })
+                    Some(Dictation::Recording { capture, start, .. })
                         if capture.ended() || start.elapsed().as_secs() >= capture::MAX_SECONDS =>
                     {
                         Some(Err(anyhow::anyhow!(
@@ -224,7 +268,30 @@ impl ChatWidget {
 mod tests {
     use super::*;
     use crate::chatwidget::tests::make_chatwidget_manual_with_sender;
-    use crossterm::event::KeyEvent;
+    #[test]
+    fn sustained_hold_survives_repeat_release_pairs_until_key_up() {
+        let mut hold = DictationHold::default();
+        let mut now = Instant::now();
+        let w = |kind, modifiers| KeyEvent::new_with_kind(KeyCode::Char('w'), modifiers, kind);
+        hold.observe(w(KeyEventKind::Press, KeyModifiers::ALT), now);
+        now += Duration::from_millis(500);
+        for n in 0..120 {
+            hold.observe(w(KeyEventKind::Release, KeyModifiers::ALT), now);
+            assert!(!hold.released(now));
+            now += Duration::from_millis(2);
+            let down = if n % 2 == 0 {
+                KeyEventKind::Repeat
+            } else {
+                KeyEventKind::Press
+            };
+            hold.observe(w(down, KeyModifiers::ALT), now);
+            now += Duration::from_millis(30);
+            assert!(!hold.released(now));
+        }
+        // Releasing Alt first may leave the physical W release unmodified.
+        hold.observe(w(KeyEventKind::Release, KeyModifiers::NONE), now);
+        assert!(hold.released(now + DictationHold::RELEASE_GRACE));
+    }
 
     #[tokio::test]
     async fn processing_result_belongs_to_the_open_draft() {
