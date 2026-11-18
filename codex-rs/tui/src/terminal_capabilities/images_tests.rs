@@ -203,6 +203,12 @@ fn orca_graphics_require_a_direct_terminal_and_advertised_protocol() {
 fn pet_image_support_detects_sixel_terminals() {
     for info in [
         terminal_info_for_test(
+            TerminalName::Konsole,
+            /*multiplexer*/ None,
+            /*term_program*/ None,
+            Some("xterm-256color"),
+        ),
+        terminal_info_for_test(
             TerminalName::Unknown,
             /*multiplexer*/ None,
             /*term_program*/ None,
