@@ -1122,6 +1122,9 @@ pub(crate) enum AppEvent {
         url: String,
     },
 
+    /// Open a local file using the desktop file association.
+    OpenExternalFile(codex_utils_path_uri::PathUri),
+
     /// Open the current thread in Codex Desktop.
     OpenDesktopThread {
         thread_id: ThreadId,
