@@ -125,6 +125,7 @@ impl ChatWidget {
             .set_queue_submissions(/*queue_submissions*/ false);
         self.set_model_provider(&session.model_provider_id);
         if previous_thread_id != self.thread_id {
+            self.dictation = None;
             if self.model_popup_request_id.is_none()
                 && (previous_thread_id.is_some() || cwd_changed)
                 && self.status_account_display == Some(StatusAccountDisplay::ApiKey)

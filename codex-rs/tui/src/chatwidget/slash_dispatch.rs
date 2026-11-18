@@ -441,12 +441,7 @@ impl ChatWidget {
                     );
                 }
             }
-            SlashCommand::Voice => {
-                self.app_event_tx.send(AppEvent::VoiceControl {
-                    thread_id: self.thread_id(),
-                    control: crate::app_event::VoiceControl::Toggle,
-                });
-            }
+            SlashCommand::Voice => self.open_dictation_settings(),
             SlashCommand::Workflow => {
                 if self.config.features.enabled(Feature::Workflows) {
                     self.app_event_tx.send(AppEvent::OpenWorkflowManager {
@@ -1355,7 +1350,6 @@ impl ChatWidget {
             workflow_command_enabled: self.config.features.enabled(Feature::Workflows),
             service_tier_commands_enabled: !self.current_model_service_tier_commands().is_empty(),
             daybreak_command_description: self.daybreak_command_description(),
-            voice_command_enabled: self.realtime_conversation_available_for_thread,
             worktrees_enabled: self.local_worktree_operations,
             allow_elevate_sandbox,
             side_conversation_active: self.active_side_conversation,
@@ -1398,7 +1392,6 @@ impl ChatWidget {
             | SlashCommand::Diff
             | SlashCommand::App
             | SlashCommand::Rename
-            | SlashCommand::Voice
             | SlashCommand::Recap
             | SlashCommand::TestApproval => QueueDrain::Continue,
             SlashCommand::Cd => match self.thread_id {
@@ -1453,6 +1446,7 @@ impl ChatWidget {
             | SlashCommand::Theme
             | SlashCommand::Tui
             | SlashCommand::Pet
+            | SlashCommand::Voice
             | SlashCommand::Pets => QueueDrain::Stop,
         }
     }

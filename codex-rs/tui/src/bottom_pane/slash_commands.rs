@@ -54,7 +54,6 @@ pub(crate) struct BuiltinCommandFlags {
     pub(crate) daybreak_command_description: Option<&'static str>,
     pub(crate) goal_command_enabled: bool,
     pub(crate) workflow_command_enabled: bool,
-    pub(crate) voice_command_enabled: bool,
     pub(crate) worktrees_enabled: bool,
     pub(crate) allow_elevate_sandbox: bool,
     pub(crate) side_conversation_active: bool,
@@ -75,7 +74,6 @@ pub(crate) fn builtins_for_input(flags: BuiltinCommandFlags) -> Vec<(&'static st
                 || !matches!(cmd, SlashCommand::Workflow | SlashCommand::Workflows)
         })
         .filter(|(_, cmd)| flags.worktrees_enabled || *cmd != SlashCommand::Worktree)
-        .filter(|(_, cmd)| flags.voice_command_enabled || *cmd != SlashCommand::Voice)
         .filter(|(_, cmd)| {
             flags.daybreak_command_description.is_some() || *cmd != SlashCommand::Daybreak
         })
@@ -198,7 +196,6 @@ mod tests {
             daybreak_command_description: Some(""),
             goal_command_enabled: true,
             workflow_command_enabled: true,
-            voice_command_enabled: true,
             worktrees_enabled: true,
             allow_elevate_sandbox: true,
             side_conversation_active: false,
@@ -317,10 +314,11 @@ mod tests {
     }
 
     #[test]
-    fn voice_command_is_hidden_when_disabled() {
-        let mut flags = all_enabled_flags();
-        flags.voice_command_enabled = false;
-        assert_eq!(find_builtin_command("voice", flags), None);
+    fn voice_setup_is_available_without_realtime() {
+        assert_eq!(
+            find_builtin_command("voice", BuiltinCommandFlags::default()),
+            Some(SlashCommand::Voice)
+        );
     }
 
     #[test]

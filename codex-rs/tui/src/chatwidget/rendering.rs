@@ -385,7 +385,11 @@ impl ChatWidget {
         &'a self,
         mut options: crate::bottom_pane::ComposerRenderOptions<'a>,
     ) -> RenderableItem<'a> {
-        if self.fork_in_progress {
+        if let Some(dictation) = &self.dictation
+            && self.no_modal_or_popup_active()
+        {
+            RenderableItem::Owned(Box::new(dictation.panel(self.local_settings.tui.animations)))
+        } else if self.fork_in_progress {
             RenderableItem::Owned(Box::new(
                 Paragraph::new("Forking conversation…".dim()).inset(Insets::tlbr(
                     /*top*/ 1, /*left*/ 2, /*bottom*/ 1, /*right*/ 2,
