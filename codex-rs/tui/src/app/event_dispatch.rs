@@ -3439,6 +3439,7 @@ impl App {
                 }
                 self.chat_widget.on_plugin_mentions_loaded(plugins);
             }
+            AppEvent::SaveDictationModel(model) => self.save_dictation_model(model).await,
             AppEvent::OpenRealtimeSettings => {
                 if crate::boxed_future!(self.ensure_voice_account()).await {
                     self.chat_widget.open_realtime_settings();

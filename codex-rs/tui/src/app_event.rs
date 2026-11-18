@@ -1654,6 +1654,9 @@ pub(crate) enum AppEvent {
     /// Show the cyber auto-review notice after the model selection confirmation.
     CyberModelAutoReviewNotice,
 
+    /// Save the transcription model in the local TUI preferences.
+    SaveDictationModel(String),
+
     OpenRealtimeSettings,
     OpenRealtimeSoundDevices,
     OpenRealtimeVoices,
