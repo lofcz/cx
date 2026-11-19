@@ -467,13 +467,15 @@ where
                             .write_all(crate::pets::kitty_delete_image(id).as_bytes())?;
                     }
                 }
-                crate::pets::ImageProtocol::Sixel => {
+                crate::pets::ImageProtocol::Sixel if old.image.encoded.is_some() => {
                     let area = old.area.intersection(self.viewport_area);
                     for pos in area.positions() {
                         self.previous_buffer_mut()[pos]
                             .set_diff_option(CellDiffOption::AlwaysUpdate);
                     }
                 }
+                // Inline transcript images can scroll with terminal-owned history.
+                crate::pets::ImageProtocol::Sixel => self.invalidate_viewport(),
             }
         }
 
