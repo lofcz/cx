@@ -491,14 +491,7 @@ impl TranscriptView {
                 image.columns,
                 (rows.len() - skip) as u16,
             );
-            placements.push(crate::transcript_image::ImagePlacement {
-                image: Arc::clone(image),
-                area,
-                first_row: visible.row.saturating_sub(image_start),
-                crop: None,
-                file: None,
-                terminal_id: None,
-            });
+            placements.push(image.placement(area, visible.row.saturating_sub(image_start)));
         }
         placements
     }
@@ -515,6 +508,11 @@ impl TranscriptView {
     ) {
         let width = area.width;
         let unseen_activity = self.unseen_activity;
+        if self.cache.reuse_text_width {
+            self.render(area, buffer, cells);
+            self.unseen_activity = unseen_activity;
+            return;
+        }
         let (summary, expanded) = self.sync_live_tool_summary(cells, collapse_turn_details, active);
         let disclose = !self.disclosure.live_ids.is_empty() && self.mode == HistoryRenderMode::Rich;
         let mode = self.mode;

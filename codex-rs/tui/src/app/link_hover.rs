@@ -253,6 +253,51 @@ impl App {
         Destination::resolve(view.pointer_destination(mouse.column, mouse.row)?, &cwd)
     }
 
+    pub(super) fn image_at_pointer(
+        &self,
+        tui: &Tui,
+        mouse: MouseEvent,
+    ) -> Option<(ThreadId, PathUri)> {
+        if self.overlay.is_some() || !self.link_input_available(tui, mouse) {
+            return None;
+        }
+        let Destination::File(path) = self.pointer_destination(mouse)? else {
+            return None;
+        };
+        if !crate::sidebar_image::supports_path(&path.inferred_native_path_string()) {
+            return None;
+        }
+        let point = (mouse.column, mouse.row).into();
+        let source = match self.hovered_sidebar_target(Some(point)) {
+            Some(SidebarTarget::Tab(
+                TabTarget::Tab(SidebarTab::Document(id))
+                | TabTarget::Overflow {
+                    tab: SidebarTab::Document(id),
+                    ..
+                },
+            )) => self.sidebar()?.documents.get(&id)?.source,
+            Some(SidebarTarget::Row(_)) => self.sidebar_parent()?,
+            _ if self
+                .conversation_frame
+                .panel_area()
+                .is_some_and(|area| area.contains(point)) =>
+            {
+                let pane = self.sidebar()?;
+                let SidebarContent::Document(id) = pane.visible_content()? else {
+                    return None;
+                };
+                pane.documents.get(&id)?.source
+            }
+            _ => self
+                .conversation_frame
+                .side_pane()
+                .filter(|panes| panes.passive.contains(point))
+                .map(|panes| panes.passive_thread)
+                .or_else(|| self.current_displayed_thread_id())?,
+        };
+        Some((source, path))
+    }
+
     pub(super) fn handle_link_gesture(&mut self, tui: &mut Tui, mouse: MouseEvent) -> bool {
         let copy = mouse.kind == Down(Right) && mouse.modifiers.is_empty();
         let open = mouse.kind == Down(Left)

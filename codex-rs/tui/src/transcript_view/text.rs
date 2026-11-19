@@ -52,7 +52,7 @@ use ratatui::text::Line;
 /// One cell's logical text and its width-dependent display rows.
 pub(crate) struct TextLayout {
     blocks: std::sync::OnceLock<blocks::BlockIndex>,
-    pub(super) image: Option<std::sync::Arc<crate::transcript_image::TranscriptImage>>,
+    pub(super) image: Option<crate::transcript_image::HistoryImage>,
     pub(super) image_left_aligned: bool,
     logical: Vec<LogicalLine>,
     text: String,
@@ -682,14 +682,12 @@ impl TextLayout {
         self.rows.len()
     }
 
-    pub(super) fn visible_image(
-        &self,
-    ) -> Option<&std::sync::Arc<crate::transcript_image::TranscriptImage>> {
+    pub(super) fn visible_image(&self) -> Option<&crate::transcript_image::HistoryImage> {
         self.image.as_ref().filter(|image| {
             image.columns + 2 <= self.width
-                && (image.protocol != crate::pets::ImageProtocol::Sixel
+                && (image.display.protocol != crate::pets::ImageProtocol::Sixel
                     || crate::transcript_image::terminal_cell_size()
-                        == Some((image.cell_width, image.cell_height)))
+                        == Some((image.display.cell_width, image.display.cell_height)))
         })
     }
 
@@ -720,7 +718,7 @@ impl TextLayout {
             let mut row_area =
                 Rect::new(area.x, area.y + screen_row, area.width, /*height*/ 1);
             buf.set_style(row_area, row.line.line.style);
-            row_area.width = row.content_width;
+            row_area.width = row.content_width.min(area.width);
             // The layout has already wrapped each row. Only links need the paragraph's
             // projection into terminal columns.
             let line = row.painted_line();
@@ -944,7 +942,7 @@ impl TextLayout {
                 let width = row.tabs.grapheme_width(offset, grapheme);
                 if start < range.end && start + grapheme.len() > range.start {
                     for selected_column in
-                        column..(column + width).min(usize::from(row.content_width))
+                        column..(column + width).min(usize::from(row.content_width.min(area.width)))
                     {
                         buf[(area.x + selected_column as u16, area.y + screen_row)]
                             .set_style(Style::default().add_modifier(Modifier::REVERSED));
@@ -978,7 +976,7 @@ impl TextLayout {
                     display_width(&self.text[row.source.clone()]),
                     row.source.len(),
                 );
-            if selected && column < usize::from(self.width) {
+            if selected && column < usize::from(self.width.min(area.width)) {
                 buf[(area.x + column as u16, area.y + screen_row)]
                     .set_style(Style::default().add_modifier(Modifier::REVERSED));
             }
@@ -1069,7 +1067,6 @@ impl TextLayout {
 
     fn visible_rows(&self, area: Rect, start_row: usize) -> impl Iterator<Item = (u16, &TextRow)> {
         let height = if area.width == 0 { 0 } else { area.height };
-        debug_assert!(area.width == 0 || area.width == self.width);
         self.rows
             .iter()
             .skip(start_row)

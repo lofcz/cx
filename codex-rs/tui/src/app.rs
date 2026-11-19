@@ -241,6 +241,7 @@ mod feedback_upload;
 mod file_change_approvals;
 mod history_pagination;
 mod history_ui;
+mod image_hover;
 mod input;
 mod link_hover;
 mod loaded_threads;
@@ -903,6 +904,15 @@ impl App {
             self.chat_widget.end_composer_drag();
             self.chat_widget.rendered_selection.borrow_mut().end_drag();
         }
+        if self.divider_drag.is_some()
+            && matches!(&event, TuiEvent::Mouse(mouse)
+            if matches!(mouse.kind, MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Up(MouseButton::Left)))
+        {
+            tui.link_hover.observe(&event);
+            if self.handle_divider_event(tui, &event).await? {
+                return Ok(AppRunControl::Continue);
+            }
+        }
         match &event {
             // A terminal can report focus between mouse-down and mouse-up.
             TuiEvent::Draw
@@ -967,6 +977,7 @@ impl App {
             return Ok(AppRunControl::Continue);
         }
         self.observe_pointer(tui, &event);
+        self.update_image_hover(tui, app_server, &event);
         if Box::pin(sidebar_close::handle(self, tui, app_server, &event)).await {
             return Ok(AppRunControl::Continue);
         }
@@ -1610,6 +1621,7 @@ impl App {
             !self.app_server_target.uses_remote_workspace()
                 && crate::projectless::has_only_local_environments(&self.environment_manager)
         });
+        let protocol = protocol.map(crate::pets::ImageProtocol::for_interactive_image);
         self.chat_widget.prepare_composer_images(protocol);
         protocol
     }

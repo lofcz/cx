@@ -61,6 +61,10 @@ pub fn kitty_delete_image(image_id: u32) -> String {
     wrap_graphics_command(&format!("{ESC}_Ga=d,d=I,i={image_id},q=2;{ST}"))
 }
 
+pub(crate) fn kitty_hide_image(image_id: u32) -> String {
+    wrap_graphics_command(&format!("{ESC}_Ga=d,d=i,i={image_id},q=2;{ST}"))
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum KittyPlacement {
     Cursor(u32),
