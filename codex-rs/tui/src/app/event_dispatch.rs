@@ -3102,6 +3102,16 @@ impl App {
                 self.handle_feedback_submitted(origin_thread_id, category, include_logs, result)
                     .await;
             }
+            AppEvent::ManageAccounts(args) => {
+                if self.chat_widget.remote_connection.as_ref().is_some_and(|remote| !remote.is_local_daemon) {
+                    self.chat_widget.add_error_message("Account management is available in local CX sessions.".into());
+                } else if args.is_empty() {
+                    self.chat_widget.open_accounts_menu();
+                } else {
+                    self.manage_accounts(tui, args).await;
+                }
+            }
+            AppEvent::AccountNamePrompt { title, action } => self.chat_widget.account_name_prompt(title, action),
             AppEvent::LaunchExternalEditor => {
                 if self.chat_widget.external_editor_state() == ExternalEditorState::Active {
                     self.launch_external_editor(tui).await;
