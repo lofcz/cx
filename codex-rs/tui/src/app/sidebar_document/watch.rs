@@ -9,6 +9,7 @@ use super::DocumentContent;
 use super::FileLink;
 use super::SidebarImage;
 use super::ThreadId;
+use crate::pets::ImageProtocol;
 use tokio::sync::watch;
 
 impl Document {
@@ -18,6 +19,7 @@ impl Document {
         parent: ThreadId,
         server: &AppServerSession,
         tx: AppEventSender,
+        protocol: Option<ImageProtocol>,
     ) {
         let reader = server.request_view();
         let backend_id = self.backend;
@@ -40,12 +42,14 @@ impl Document {
                         let bytes = reader
                             .read_preview_file(source, &original_path, &path)
                             .await?;
-                        tokio::task::spawn_blocking(move || match SidebarImage::decode(&bytes) {
-                            Ok(image) => Ok(DocumentContent::Image(Box::new(image))),
-                            Err(image_error) => AppServerSession::preview_text(bytes)
-                                .map(DocumentContent::Text)
-                                .map_err(|_| image_error),
-                        })
+                        tokio::task::spawn_blocking(
+                            move || match SidebarImage::decode_for_terminal(&bytes, protocol) {
+                                Ok(image) => Ok(DocumentContent::Image(Box::new(image))),
+                                Err(image_error) => AppServerSession::preview_text(bytes)
+                                    .map(DocumentContent::Text)
+                                    .map_err(|_| image_error),
+                            },
+                        )
                         .await?
                     } else {
                         reader
