@@ -681,6 +681,7 @@ async fn owned_details_keep_the_composer_cursor_and_screen() -> Result<()> {
                 image,
                 area: neighbor,
                 first_row: 0,
+                crop: None,
                 file: None,
                 terminal_id: None,
             });

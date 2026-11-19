@@ -182,6 +182,26 @@ fn is_iterm2_terminal(info: &TerminalInfo) -> bool {
         || terminal_field_contains(info.term_program.as_deref(), "iterm")
 }
 
+impl ImageProtocol {
+    pub(crate) fn for_sidebar(self) -> Self {
+        if self != Self::Sixel {
+            return self;
+        }
+        let info = terminal_info();
+        // KONSOLE_VERSION is YYMMpp, TERM_PROGRAM_VERSION can be dotted.
+        let supports_crop = info.name == TerminalName::Konsole
+            && info.multiplexer.is_none()
+            && info.version.as_deref().is_some_and(|version| {
+                if version.contains('.') {
+                    version_is_at_least(Some(version), (22, 4, 0))
+                } else {
+                    version.parse::<u32>().is_ok_and(|packed| packed >= 220400)
+                }
+            });
+        if supports_crop { Self::Kitty } else { self }
+    }
+}
+
 fn supports_kitty_graphics(info: &TerminalInfo) -> bool {
     matches!(
         info.name,
@@ -261,11 +281,24 @@ impl KittyPlacement {
     }
 }
 
-pub(crate) fn kitty_move_image(id: u32, area: ratatui::layout::Rect) -> String {
+pub(crate) fn kitty_place_image(
+    id: u32,
+    area: Rect,
+    crop: Option<image::math::Rect>,
+    moving: bool,
+) -> String {
     let (columns, rows) = (area.width, area.height);
+    let source = crop.map_or_else(String::new, |r| {
+        format!(",x={},y={},w={},h={}", r.x, r.y, r.width, r.height)
+    });
     // Lowercase i removes placements but keeps the uploaded pixel data.
+    let delete = if moving {
+        format!("{ESC}_Ga=d,d=i,i={id},q=2;{ST}")
+    } else {
+        String::new()
+    };
     wrap_for_tmux_if_needed(&format!(
-        "{ESC}_Ga=d,d=i,i={id},q=2;{ST}{ESC}_Ga=p,i={id},c={columns},r={rows},C=1,q=2;{ST}"
+        "{delete}{ESC}_Ga=p,i={id}{source},c={columns},r={rows},C=1,q=2;{ST}"
     ))
 }
 
@@ -276,28 +309,36 @@ pub fn kitty_transmit_png_with_id(
     placement: KittyPlacement,
 ) -> Result<String> {
     let png = fs::read(path).with_context(|| format!("read {}", path.display()))?;
-    let payload = general_purpose::STANDARD.encode(png);
-    let chunks = payload
-        .as_bytes()
-        .chunks(KITTY_CHUNK_SIZE)
-        .collect::<Vec<_>>();
+    Ok(kitty_display_png(&png, columns, rows, placement))
+}
 
-    let mut command = String::new();
-    for (index, chunk) in chunks.iter().enumerate() {
-        let chunk = std::str::from_utf8(chunk).context("base64 payload is not valid UTF-8")?;
-        let has_more = index + 1 < chunks.len();
-        let more_flag = u8::from(has_more);
+pub(crate) fn kitty_display_png(
+    png: &[u8],
+    columns: u16,
+    rows: u16,
+    placement: KittyPlacement,
+) -> String {
+    let image_id = kitty_image_id_arg(placement);
+    kitty_png_command(
+        png,
+        &format!("a=T,t=d,f=100,c={columns},r={rows},q=2{image_id}"),
+    )
+}
+
+pub(crate) fn kitty_png_command(png: &[u8], header: &str) -> String {
+    use std::fmt::Write as _;
+    let payload = general_purpose::STANDARD.encode(png);
+    let mut command = String::with_capacity(payload.len());
+    for (index, bytes) in payload.as_bytes().chunks(KITTY_CHUNK_SIZE).enumerate() {
+        let chunk = std::str::from_utf8(bytes).expect("base64 is ASCII");
+        let more_flag = u8::from((index + 1) * KITTY_CHUNK_SIZE < payload.len());
         if index == 0 {
-            let image_id = kitty_image_id_arg(placement);
-            command.push_str(&format!(
-                "{ESC}_Ga=T,t=d,f=100,c={columns},r={rows},q=2{image_id},m={more_flag},C=1;{chunk}{ST}",
-            ));
+            let _ = write!(command, "{ESC}_G{header},m={more_flag},C=1;{chunk}{ST}");
         } else {
-            command.push_str(&format!("{ESC}_Gm={more_flag};{chunk}{ST}"));
+            let _ = write!(command, "{ESC}_Gm={more_flag};{chunk}{ST}");
         }
     }
-
-    Ok(wrap_for_tmux_if_needed(&command))
+    wrap_for_tmux_if_needed(&command)
 }
 
 pub fn kitty_transmit_png_file_with_id(
