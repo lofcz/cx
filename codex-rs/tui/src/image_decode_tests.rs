@@ -74,3 +74,101 @@ fn rejects_images_larger_than_the_pixel_budget() {
         Err(image::ImageError::Limits(_))
     ));
 }
+
+#[test]
+fn native_png_reuses_only_decoded_pixel_chunks() {
+    let raster =
+        image::RgbaImage::from_raw(2, 1, vec![213, 45, 87, 255, 240, 11, 155, 13]).unwrap();
+    let bytes = super::encode_png(&raster).unwrap();
+    let (actual, native) =
+        super::sidebar_pixels(&bytes, ImageFormat::Png, Limits::default()).unwrap();
+    assert_eq!(actual, raster);
+    assert_eq!(native.as_deref(), Some(bytes.as_slice()));
+
+    let mut tagged = bytes.clone();
+    // A known ancillary chunk with its CRC. Metadata must stay out of the terminal payload.
+    let phys = b"\0\0\0\tpHYs\0\0\x0b\x13\0\0\x0b\x13\x01\0\x9a\x9c\x18";
+    tagged.splice(33..33, phys.iter().copied());
+    let (actual, native) =
+        super::sidebar_pixels(&tagged, ImageFormat::Png, Limits::default()).unwrap();
+    assert_eq!(actual, raster);
+    assert_eq!(native.as_deref(), Some(bytes.as_slice()));
+
+    let mut corrupt = bytes.clone();
+    corrupt[41] ^= 1; // First IDAT data byte.
+    assert!(super::sidebar_pixels(&corrupt, ImageFormat::Png, Limits::default()).is_err());
+    let mut appended = bytes;
+    appended.extend_from_slice(b"after IEND");
+    let (_, native) =
+        super::sidebar_pixels(&appended, ImageFormat::Png, Limits::default()).unwrap();
+    assert!(native.is_none());
+}
+
+#[test]
+fn sidebar_checks_final_rgba_size_and_orients_before_upload() {
+    let mut bytes = Vec::new();
+    write_fixture(PngEncoder::new(&mut bytes), Some(6));
+    let raw = image::load_from_memory(&bytes).unwrap();
+    let (actual, native) =
+        super::sidebar_pixels(&bytes, ImageFormat::Png, Limits::default()).unwrap();
+    assert_eq!(actual, raw.rotate90().into_rgba8());
+    assert!(native.is_none());
+    let mut limits = Limits::default();
+    limits.max_alloc = Some(23); // Six grayscale pixels fit, six RGBA pixels don't.
+    assert!(super::sidebar_pixels(&bytes, ImageFormat::Png, limits).is_err());
+}
+
+#[test]
+fn sidebar_jpeg_decodes_camera_pixels_in_exif_orientation() {
+    let mut bytes = Vec::new();
+    let mut encoder = JpegEncoder::new(&mut bytes);
+    let exif = b"II\x2a\0\x08\0\0\0\x01\0\x12\x01\x03\0\x01\0\0\0\x06\0\0\0\0\0\0\0";
+    encoder.set_exif_metadata(exif.to_vec()).unwrap();
+    encoder
+        .write_image(
+            &[
+                255, 25, 0, 12, 239, 29, 3, 112, 195, 12, 34, 56, 89, 224, 17, 0, 0, 0,
+            ],
+            3,
+            2,
+            image::ExtendedColorType::Rgb8,
+        )
+        .unwrap();
+    let expected = image::load_from_memory(&bytes)
+        .unwrap()
+        .rotate90()
+        .into_rgba8();
+    let (actual, native) =
+        super::sidebar_pixels(&bytes, ImageFormat::Jpeg, Limits::default()).unwrap();
+    assert_eq!(actual, expected);
+    assert!(native.is_none());
+    let mut limits = Limits::default();
+    limits.max_alloc = Some(23);
+    assert!(super::sidebar_pixels(&bytes, ImageFormat::Jpeg, limits).is_err());
+}
+
+#[test]
+fn fallback_crops_exact_pixels_and_resamples_transparency() {
+    let raster =
+        image::RgbaImage::from_raw(3, 1, vec![0, 255, 0, 255, 0, 0, 255, 255, 255, 0, 0, 0])
+            .unwrap();
+    let crop = image::math::Rect {
+        x: 1,
+        y: 0,
+        width: 2,
+        height: 1,
+    };
+    let exact = super::resize_crop(&raster, crop, 2, 1).unwrap();
+    assert_eq!(exact.as_raw(), &raster.as_raw()[4..]);
+    let crop = image::math::Rect {
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 1,
+    };
+    let blended = super::resize_crop(&exact, crop, 1, 1).unwrap();
+    let [r, g, b, a] = blended.get_pixel(0, 0).0;
+    assert_eq!([r, g, b], [0, 0, 255]);
+    assert!((127..=128).contains(&a));
+    assert!(super::resize_crop(&raster, crop, 65_536, 65_536).is_err());
+}

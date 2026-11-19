@@ -71,7 +71,31 @@ impl LinkTooltip {
         } else {
             point.y - height
         };
-        let rect = Rect::new(point.x.min(area.right() - width), y, width, height);
+        let x = point.x.min(area.right() - width);
+        let preferred = Rect::new(x, y, width, height);
+        let rect = [
+            y,
+            point.y.saturating_sub(height).max(area.y),
+            (point.y + 1).min(area.bottom() - height),
+        ]
+        .into_iter()
+        .flat_map(|row| {
+            [
+                x,
+                point.x.saturating_sub(width).max(area.x),
+                area.x,
+                area.right() - width,
+            ]
+            .map(|column| Rect::new(column, row, width, height))
+        })
+        .find(|rect| {
+            !rect.contains(point)
+                && frame
+                    .image_placements
+                    .iter()
+                    .all(|image| !image.area.intersects(*rect))
+        })
+        .unwrap_or(preferred);
         Clear.render(rect, frame.buffer);
         paragraph.render(rect, frame.buffer);
         frame

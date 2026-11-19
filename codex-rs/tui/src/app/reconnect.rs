@@ -421,6 +421,7 @@ impl App {
         for pane in self.sidebars.values_mut() {
             pane.focus_document_request = None;
             pane.agents.pending_link = None;
+            pane.image_hover = Default::default();
             for doc in pane.documents.values_mut() {
                 doc.connection_replaced();
             }

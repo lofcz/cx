@@ -55,7 +55,7 @@ fn layouts_refresh_for_width_animation_and_mutable_frames() {
                     detailed: false,
                     image_protocol: None,
                 },
-                || TextLayout::new(history.transcript_hyperlink_lines(width), width),
+                |_| TextLayout::new(history.transcript_hyperlink_lines(width), width),
             )
         };
         cache.begin_frame();
@@ -114,7 +114,7 @@ fn recent_entries_are_reused_and_old_entries_are_evicted() {
                 detailed: false,
                 image_protocol: None,
             },
-            || {
+            |_| {
                 TextLayout::new(
                     history.transcript_hyperlink_lines(/*width*/ 20),
                     /*width*/ 20,
@@ -137,7 +137,7 @@ fn recent_entries_are_reused_and_old_entries_are_evicted() {
                 detailed: false,
                 image_protocol: None,
             },
-            || {
+            |_| {
                 TextLayout::new(
                     history.transcript_hyperlink_lines(/*width*/ 20),
                     /*width*/ 20,
@@ -149,6 +149,81 @@ fn recent_entries_are_reused_and_old_entries_are_evicted() {
         [99, 98, 0].map(|index| cells[index].renders.load(Ordering::Relaxed)),
         [1, 1, 2]
     );
+}
+
+#[test]
+fn divider_drag_clips_cached_markdown_until_release() {
+    let cells: Vec<Arc<dyn HistoryCell>> =
+        vec![Arc::new(crate::history_cell::AgentMarkdownCell::new(
+            format!(
+                "{}\n\n```rust\n{}\n```",
+                "A long answer with prose and **formatting**. ".repeat(64),
+                "let value = \"a code line long enough to cross the moving divider\";\n"
+                    .repeat(512)
+            ),
+            std::path::Path::new("."),
+        ))];
+    let screen = Rect::new(0, 0, 100, 18);
+    let mut buf = Buffer::empty(screen);
+    let mut view = TranscriptView::default();
+    view.render(screen, &mut buf, &cells);
+    let original = Arc::clone(&view.visible[0].layout);
+    view.set_divider_preview(true);
+    for width in [36, 40, 42] {
+        let area = Rect::new(0, 0, width, screen.height);
+        buf.reset();
+        view.render(area, &mut buf, &cells);
+        assert!(Arc::ptr_eq(&view.visible[0].layout, &original));
+        assert!((0..screen.height).all(|y| buf[(width, y)].symbol() == " "));
+    }
+    view.set_divider_preview(false);
+    view.render(Rect::new(0, 0, 42, screen.height), &mut buf, &cells);
+    let reflowed = &view.visible[0].layout;
+    assert!(!Arc::ptr_eq(reflowed, &original));
+    assert!(reflowed.row_count() > original.row_count());
+}
+
+#[test]
+fn divider_drag_reuses_visible_transcript_image_across_widths() {
+    use crate::history_cell::new_image_generation_call;
+    use crate::pets::ImageProtocol;
+    use codex_utils_absolute_path::AbsolutePathBuf;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("wide.png");
+    let pixels = image::RgbImage::new(768, 192);
+    let cells: Vec<Arc<dyn HistoryCell>> = vec![Arc::new(new_image_generation_call(
+        "image".into(),
+        "completed",
+        None,
+        Some(AbsolutePathBuf::try_from(path.clone()).unwrap()),
+    ))];
+    for protocol in [ImageProtocol::Kitty, ImageProtocol::KittyLocalFile] {
+        let mut view = TranscriptView::default();
+        view.image_protocol = Some(protocol);
+        pixels.save(&path).unwrap();
+        let mut paint = |width| {
+            let area = Rect::new(0, 0, width, 40);
+            view.render(area, &mut Buffer::empty(area), &cells);
+            view.image_placements().pop().expect("visible image")
+        };
+        let original = paint(160);
+        // A visible entry retains its prepared thumbnail until its layout cache is evicted.
+        std::fs::remove_file(&path).unwrap();
+        let narrow = paint(12);
+        let restored = paint(160);
+        assert_eq!(narrow.area.width, 10);
+        assert!(narrow.area.width < original.area.width);
+        assert_eq!(original.area, restored.area);
+        assert!(Arc::ptr_eq(&original.image, &restored.image));
+        if protocol == ImageProtocol::Kitty {
+            assert!(Arc::ptr_eq(&original.image, &narrow.image));
+            assert_eq!(narrow.crop, original.crop);
+        } else {
+            assert_eq!(narrow.image.columns, narrow.area.width);
+            assert!(narrow.image.pixels.width() < original.image.pixels.width());
+        }
+    }
 }
 
 #[test]

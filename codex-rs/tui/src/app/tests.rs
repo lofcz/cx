@@ -4198,6 +4198,124 @@ async fn reopen_saved_side_chat(during: DuringOpen) -> Result<()> {
 }
 
 #[tokio::test]
+#[cfg(unix)]
+async fn divider_drag_resizes_image_preview_before_saving() -> Result<()> {
+    let (mut app, mut events, _ops) = make_test_app_with_channels().await;
+    enable_side_retention(&mut app)?;
+    app.local_settings.tui.animations = false;
+    let dir = tempfile::tempdir()?;
+    app.config.cwd = AbsolutePathBuf::try_from(dir.path().canonicalize()?)?;
+    let image = app.config.cwd.join("wide.png");
+    image::RgbaImage::from_pixel(400, 24, image::Rgba([30, 70, 100, 255])).save(&image)?;
+    let mut server = start_config_write_test_app_server(&app).await?;
+    let session = server.start_thread(&app.config).await?.session;
+    let parent = session.thread_id;
+    app.chat_widget.handle_thread_session(session);
+    let mut tui = crate::tui::test_support::make_test_tui()?;
+    tui.set_owned_screen(/*owned*/ true)?;
+    tui.herdr_kitty_graphics = Some(true);
+    let size = Size::new(180, 20);
+    tui.terminal = crate::tui::Terminal::with_screen_size_and_cursor_position_for_test(
+        ratatui::backend::CrosstermBackend::new(std::io::stdout()),
+        size,
+        Default::default(),
+    );
+    boxed_future!(app.open_resolved_document(
+        &mut tui,
+        &mut server,
+        parent,
+        codex_app_server_client::AppServerPath::from_app_server("wide.png"),
+        image.into(),
+        /*location*/ None,
+        /*focus*/ true
+    ))
+    .await?;
+    let loaded = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let event = events.recv().await.expect("document loader");
+            if matches!(event, AppEvent::SidebarDocumentLoaded { .. }) {
+                break event;
+            }
+        }
+    })
+    .await?;
+    boxed_future!(app.handle_event(&mut tui, &mut server, loaded)).await?;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            side_frame(&mut app, &mut tui, size)?;
+            if !tui.retained_images.is_empty() {
+                return Ok::<_, color_eyre::Report>(());
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await??;
+
+    let path = app.local_settings.user_config_path.clone();
+    let before = std::fs::read(&path).ok();
+    let divider = app.conversation_frame.divider_area().unwrap().x;
+    let left = MouseButton::Left;
+    let row = tui.retained_images[0].area.y;
+    boxed_future!(app.handle_tui_event(
+        &mut tui,
+        &mut server,
+        mouse(MouseEventKind::Down(left), divider, row)
+    ))
+    .await?;
+    boxed_future!(app.handle_tui_event(&mut tui, &mut server, TuiEvent::FocusGained)).await?;
+    assert!(app.divider_drag.is_some());
+    let mut redraws = crate::tui::test_support::record_frame_requests(&mut tui);
+    for offset in [8, 16] {
+        while redraws.try_recv().is_ok() {}
+        let x = divider - offset;
+        for delta in (0..3).rev() {
+            let motion = mouse(MouseEventKind::Drag(left), x + delta, row);
+            boxed_future!(app.handle_tui_event(&mut tui, &mut server, motion)).await?;
+        }
+        assert!(redraws.try_recv().is_ok());
+        assert!(redraws.try_recv().is_err(), "one draw for this burst");
+        side_frame(&mut app, &mut tui, size)?;
+        let panel = app.conversation_frame.panel_area().unwrap();
+        assert_eq!(panel.x, x + 1);
+        assert_eq!(
+            app.conversation_frame.sidebar_tab_strip().unwrap().width,
+            panel.width
+        );
+        let preview = tui.retained_images[0].area;
+        assert_eq!((preview.x, preview.width), (panel.x + 1, panel.width - 2));
+        assert_eq!(std::fs::read(&path).ok(), before);
+    }
+    // The release has its own coordinate even when no final motion was delivered.
+    let x = divider - 12;
+    boxed_future!(app.handle_tui_event(
+        &mut tui,
+        &mut server,
+        mouse(MouseEventKind::Up(left), x, row)
+    ))
+    .await?;
+    side_frame(&mut app, &mut tui, size)?;
+    assert_eq!(app.conversation_frame.divider_area().unwrap().x, x);
+    let confirmed = std::fs::read_to_string(&path)?;
+    let saved: toml::Value = toml::from_str(&confirmed)?;
+    assert_eq!(saved["tui"]["sidebar_width_percent"].as_integer(), Some(40));
+    for (kind, column) in [
+        (MouseEventKind::Down(left), x),
+        (MouseEventKind::Drag(left), x + 6),
+    ] {
+        boxed_future!(app.handle_tui_event(&mut tui, &mut server, mouse(kind, column, row)))
+            .await?;
+    }
+    assert!(app.divider_drag.is_some());
+    boxed_future!(app.handle_tui_event(&mut tui, &mut server, TuiEvent::FocusLost)).await?;
+    assert!(app.divider_drag.is_none());
+    side_frame(&mut app, &mut tui, size)?;
+    assert_eq!(app.conversation_frame.divider_area().unwrap().x, x);
+    assert_eq!(std::fs::read_to_string(path)?, confirmed);
+    server.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn handle_start_side_seeds_navigation_before_thread_started() -> Result<()> {
     let (mut app, mut app_event_rx, mut op_rx) = make_test_app_with_channels().await;
     // Both pane footers should fit the same way on Unix and Windows.
@@ -4950,7 +5068,7 @@ async fn handle_start_side_seeds_navigation_before_thread_started() -> Result<()
     let frame = side_frame(&mut app, &mut tui, size)?;
     assert_eq!(frame.matches("unfinished answer").count(), 1, "{frame}");
 
-    // A text drag reflows immediately. With retained graphics only the guide moves.
+    // Both conversation panes resize before release, including rows with retained graphics.
     let wide = Size::new(/*width*/ 300, /*height*/ 18);
     tui.terminal = terminal_at(wide);
     keys!(toggle);
@@ -4961,7 +5079,6 @@ async fn handle_start_side_seeds_navigation_before_thread_started() -> Result<()
             .find(|&x| tui.terminal.previous_buffer()[(x, y)].symbol() == "│")
             .expect("painted divider")
     };
-    let mut previews = Vec::new();
     for with_image in [false, true] {
         if with_image {
             let image_path = app.config.codex_home.join("divider.png");
@@ -5013,13 +5130,13 @@ async fn handle_start_side_seeds_navigation_before_thread_started() -> Result<()
         }
         side_frame(&mut app, &mut tui, wide)?;
         assert!(!app.key_chord_matcher.is_pending());
-        let columns: Vec<_> = (0..wide.height).map(|y| divider_at(&tui, y)).collect();
-        previews.push(*columns.iter().min().unwrap());
+        assert!((0..wide.height).all(|y| divider_at(&tui, y) == divider - 1));
+        let strip = app.conversation_frame.sidebar_tab_strip().unwrap();
+        assert_eq!(strip.x, divider);
+        assert_eq!(strip.right(), wide.width);
         assert_eq!(std::fs::read(&path).ok(), before);
-        if let Some(area) = image {
-            assert_eq!(tui.retained_images[0].area, area);
-            assert_eq!(columns[usize::from(area.y)], divider);
-            previews.push(columns[usize::from(area.y)]);
+        if with_image {
+            assert_eq!(tui.retained_images.len(), 1);
             boxed_future!(app.handle_tui_event(
                 &mut tui,
                 &mut app_server,
@@ -5027,7 +5144,6 @@ async fn handle_start_side_seeds_navigation_before_thread_started() -> Result<()
             ))
             .await?;
         } else {
-            assert!(columns.iter().all(|x| *x == divider - 1));
             // A fresh transcript press cancels a drag whose release was lost.
             for kind in [MouseEventKind::Down(left), MouseEventKind::Up(left)] {
                 boxed_future!(app.handle_tui_event(
@@ -5042,8 +5158,6 @@ async fn handle_start_side_seeds_navigation_before_thread_started() -> Result<()
             assert_eq!(divider_at(&tui, 0), divider);
         }
     }
-    // Text preview, graphics guide, and the divider on the protected image row.
-    insta::assert_snapshot!(format!("{previews:?}"), @"[198, 198, 199]");
     side_frame(&mut app, &mut tui, wide)?;
     assert_eq!(divider_at(&tui, 0), 198);
     let saved: toml::Value = toml::from_str(&std::fs::read_to_string(&path)?)?;

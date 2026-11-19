@@ -3954,7 +3954,7 @@ impl App {
                 }
             }
             AppEvent::SidebarDocumentLoaded { backend_id, parent, request, result } => {
-                if let Some(doc) = self.sidebars.get_mut(&Some(parent)).and_then(|pane| pane.documents.get_mut(&request))
+                if let Some(doc) = self.sidebars.get_mut(&Some(parent)).and_then(|pane| pane.documents.get_mut(&request).or_else(|| pane.image_hover.document_mut(request)))
                     && doc.backend == backend_id
                 {
                     doc.loaded(result);

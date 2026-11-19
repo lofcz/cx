@@ -74,10 +74,11 @@ pub(super) struct DocumentRenderOptions<'a> {
     pub(super) keymap: &'a RuntimeKeymap,
     pub(super) resize_hint: Option<&'a str>,
     pub(super) image_protocol: Option<ImageProtocol>,
+    pub(super) dragging: bool,
 }
 
 pub(super) struct Document {
-    source: ThreadId,
+    pub(super) source: ThreadId,
     pub(super) path: PathUri,
     pub(super) backend: crate::backend_id::BackendId,
     link: Option<usize>,
@@ -98,6 +99,37 @@ enum State {
 }
 
 impl Document {
+    pub(super) fn loading(
+        source: ThreadId,
+        path: PathUri,
+        backend: crate::backend_id::BackendId,
+        location: Option<SourceLocation>,
+    ) -> Self {
+        Self {
+            source,
+            path,
+            backend,
+            location,
+            link: None,
+            state: State::Loading(Instant::now()),
+        }
+    }
+
+    pub(super) fn peek_image(&self) -> Option<SidebarImage> {
+        match &self.state {
+            State::Image(image) => Some(image.fork()),
+            _ => None,
+        }
+    }
+
+    pub(super) fn loading_image(&self) -> bool {
+        matches!(self.state, State::Loading(_))
+    }
+
+    pub(super) fn failed(&self) -> bool {
+        matches!(self.state, State::Failed(_))
+    }
+
     pub(super) fn link_at(&self, column: u16, row: u16) -> Option<ReaderLink> {
         match &self.state {
             State::Ready { view, .. } if !view.is_select_mode() => view.reader_link_at(column, row),
@@ -247,6 +279,7 @@ impl Document {
             keymap,
             resize_hint,
             image_protocol,
+            dragging,
         } = options;
         let buf = &mut *frame.buffer;
         ratatui::widgets::Clear.render(area, buf);
@@ -289,6 +322,7 @@ impl Document {
                 line_starts,
                 target,
             } => {
+                view.set_divider_preview(dragging);
                 view.set_keymap_bindings(keymap);
                 if view.tick_selection(cells) {
                     frames.schedule_frame_in(std::time::Duration::from_millis(45));
@@ -363,6 +397,7 @@ impl Document {
                 if let Some(delay) = view.render_composer_gap(gap, /*hint*/ None, buf, now) {
                     frames.schedule_frame_in(delay);
                 }
+                view.set_divider_preview(false);
                 if height > 0 {
                     let footer_area =
                         Rect::new(body.x, content.bottom() + gap_height, body.width, height);
@@ -417,6 +452,9 @@ impl App {
             && self.overlay.is_none()
             && self.conversation_frame.panel_area().is_some();
         for (owner, pane) in &mut self.sidebars {
+            if *owner != parent {
+                pane.image_hover = Default::default();
+            }
             pane.cancel_hidden_document_primary(visible && *owner == parent);
         }
     }
@@ -528,22 +566,25 @@ impl App {
             }
             self.sidebar_mut().remove_document(id);
         }
-        let request = uuid::Uuid::new_v4();
+        let protocol = self.preview_image_protocol(tui);
+        let cached = self
+            .sidebar_mut()
+            .image_hover
+            .take(backend_id, source, &path);
+        let (request, mut doc) = if let Some(pair) = cached {
+            pair
+        } else {
+            let request = uuid::Uuid::new_v4();
+            let doc = Document::loading(source, path.clone(), backend_id, location);
+            drop(self.load_document(server, parent, request, &doc, original_path, protocol));
+            (request, doc)
+        };
+        doc.go_to(location);
         let pane = self.sidebar_mut();
         if !pane.opened_files.contains(&path) {
-            pane.opened_files.push(path.clone());
+            pane.opened_files.push(path);
         }
-        pane.documents.insert(
-            request,
-            Document {
-                source,
-                path: path.clone(),
-                backend: backend_id,
-                link: None,
-                location,
-                state: State::Loading(Instant::now()),
-            },
-        );
+        pane.documents.insert(request, doc);
         pane.add_document_tab(request);
         if focus {
             self.activate_sidebar_tab(tui, server, SidebarTab::Document(request))
@@ -551,7 +592,23 @@ impl App {
         } else {
             tui.frame_requester().schedule_frame();
         }
+        Ok(())
+    }
+
+    pub(super) fn load_document(
+        &self,
+        server: &AppServerSession,
+        parent: ThreadId,
+        request: uuid::Uuid,
+        doc: &Document,
+        original_path: AppServerPath,
+        protocol: Option<ImageProtocol>,
+    ) -> tokio::task::JoinHandle<()> {
         let reader = server.request_view();
+        let backend_id = reader.backend_id();
+        let source = doc.source;
+        let path = doc.path.clone();
+        let location = doc.location;
         let tx = self.app_event_tx.clone();
         tokio::spawn(async move {
             let result = async {
@@ -561,14 +618,21 @@ impl App {
                 })
                 .is_image()
                 {
+                    // A quick sweep across file rows must not queue a decode (or hold a
+                    // full-size compressed buffer) for every row the pointer crosses.
+                    static SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
+                    let permit = SLOTS.acquire().await?;
                     let bytes = reader
                         .read_preview_file(source, &original_path, &path)
                         .await?;
-                    tokio::task::spawn_blocking(move || match SidebarImage::decode(&bytes) {
-                        Ok(image) => Ok(DocumentContent::Image(Box::new(image))),
-                        Err(image_error) => AppServerSession::preview_text(bytes)
-                            .map(DocumentContent::Text)
-                            .map_err(|_| image_error),
+                    tokio::task::spawn_blocking(move || {
+                        let _permit = permit;
+                        match SidebarImage::decode_for_terminal(&bytes, protocol) {
+                            Ok(image) => Ok(DocumentContent::Image(Box::new(image))),
+                            Err(image_error) => AppServerSession::preview_text(bytes)
+                                .map(DocumentContent::Text)
+                                .map_err(|_| image_error),
+                        }
                     })
                     .await?
                 } else {
@@ -585,8 +649,7 @@ impl App {
                 request,
                 result,
             });
-        });
-        Ok(())
+        })
     }
 
     /// A pan that starts on the image owns motion and release even over another pane or tab.
