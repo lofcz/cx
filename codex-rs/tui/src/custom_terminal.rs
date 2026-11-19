@@ -447,11 +447,13 @@ where
                     && let Some(previous) = retained_images.iter().position(|old| {
                         std::sync::Arc::ptr_eq(&old.image, &image.image)
                             && old.first_row == image.first_row
-                            && old.area.as_size() == image.area.as_size()
+                            && (old.area.as_size() == image.area.as_size()
+                                || (old.crop.is_some() && image.crop.is_some()))
                     })
                 {
                     let mut old = retained_images.swap_remove(previous);
                     old.area = image.area;
+                    old.crop = image.crop;
                     *image = old;
                     moved.push(index);
                 }
@@ -465,7 +467,13 @@ where
                             .write_all(crate::pets::kitty_delete_image(id).as_bytes())?;
                     }
                 }
-                crate::pets::ImageProtocol::Sixel => self.invalidate_viewport(),
+                crate::pets::ImageProtocol::Sixel => {
+                    let area = old.area.intersection(self.viewport_area);
+                    for pos in area.positions() {
+                        self.previous_buffer_mut()[pos]
+                            .set_diff_option(CellDiffOption::AlwaysUpdate);
+                    }
+                }
             }
         }
 
@@ -511,8 +519,9 @@ where
                 SavePosition,
                 MoveTo(image.area.x, image.area.y)
             )?;
-            self.backend
-                .write_all(crate::pets::kitty_move_image(id, image.area).as_bytes())?;
+            self.backend.write_all(
+                crate::pets::kitty_place_image(id, image.area, image.crop, true).as_bytes(),
+            )?;
             queue!(self.backend, RestorePosition)?;
         }
         for index in redraw {
@@ -531,6 +540,7 @@ where
                     &mut self.backend,
                     placement.area,
                     placement.first_row,
+                    placement.crop,
                     kitty_placement,
                 )
                 .map_err(io::Error::other)?;
@@ -1083,6 +1093,7 @@ mod tests {
                                     image.rows,
                                 ),
                                 first_row: 0,
+                                crop: None,
                                 file: None,
                                 terminal_id: None,
                             });
@@ -1130,7 +1141,12 @@ mod tests {
             protocol: ImageProtocol::Kitty,
             columns: 2,
             rows: 2,
-            pixels: image::RgbaImage::from_pixel(16, 32, image::Rgba([10, 110, 200, 255])),
+            pixels: Arc::new(image::RgbaImage::from_pixel(
+                16,
+                32,
+                image::Rgba([10, 110, 200, 255]),
+            )),
+            encoded: None,
             cell_width: 8,
             cell_height: 16,
         });
@@ -1140,6 +1156,7 @@ mod tests {
                 /*x*/ 2, /*y*/ 2, /*width*/ 2, /*height*/ 2,
             ),
             first_row: 0,
+            crop: None,
             file: None,
             terminal_id: None,
         };
@@ -1182,6 +1199,52 @@ mod tests {
             .unwrap();
         assert_eq!(terminal.backend().output().matches("_Ga=T").count(), 2);
         assert_eq!(retained[0].terminal_id, original_ids[1]);
+    }
+
+    #[test]
+    fn sidebar_zoom_and_pan_send_placements_and_upload_the_source_once() {
+        use crate::transcript_image::{ImagePlacement, TranscriptImage};
+        use std::sync::Arc;
+
+        let mut terminal = Terminal::with_options(CaptureBackend::new(40, 12)).unwrap();
+        let size = terminal.last_known_screen_size;
+        terminal.set_viewport_area(size.into());
+        let pixels = Arc::new(image::RgbaImage::new(192, 120));
+        let image = Arc::new(TranscriptImage {
+            protocol: crate::pets::ImageProtocol::Kitty,
+            columns: 1,
+            rows: 1,
+            cell_width: 192,
+            cell_height: 120,
+            pixels,
+            encoded: Some(b"test upload".to_vec()),
+        });
+        let mut retained = Vec::new();
+        for (x, width, columns) in [(0, 192, 12), (40, 96, 20), (52, 96, 20)] {
+            terminal
+                .draw_with_size(size, &mut retained, |frame| {
+                    frame.image_placements.push(ImagePlacement {
+                        image: image.clone(),
+                        area: Rect::new(2, 2, columns, 6),
+                        first_row: 0,
+                        crop: Some(image::math::Rect {
+                            x,
+                            y: 0,
+                            width,
+                            height: 120,
+                        }),
+                        file: None,
+                        terminal_id: None,
+                    });
+                })
+                .unwrap();
+        }
+        let output = terminal.backend().output();
+        assert_eq!(output.matches("_Ga=t,").count(), 1);
+        assert_eq!(output.matches("_Ga=p,").count(), 3);
+        assert!(output.contains(",x=52,y=0,w=96,h=120,c=20,r=6"));
+        terminal.clear_frame_images(&mut retained).unwrap();
+        assert!(terminal.backend().output().contains("_Ga=d,d=I,"));
     }
 
     impl Backend for CaptureBackend {
