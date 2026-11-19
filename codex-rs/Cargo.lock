@@ -2607,6 +2607,7 @@ dependencies = [
  "codex-app-server-protocol",
  "codex-app-server-test-client",
  "codex-arg0",
+ "codex-backend-client",
  "codex-build-info",
  "codex-chatgpt",
  "codex-cloud-config",
