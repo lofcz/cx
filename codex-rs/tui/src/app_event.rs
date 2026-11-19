@@ -2001,6 +2001,13 @@ pub(crate) enum AppEvent {
     /// Launch the external editor after a normal draw has completed.
     LaunchExternalEditor,
 
+    /// Run the local account manager, then return to this session.
+    ManageAccounts(Vec<String>),
+    AccountNamePrompt {
+        title: &'static str,
+        action: &'static str,
+    },
+
     /// Async update of the current git branch for status line rendering.
     StatusHeaderGitStatusUpdated {
         cwd: PathBuf,
