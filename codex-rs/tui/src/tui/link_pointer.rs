@@ -40,15 +40,23 @@ pub(crate) struct LinkTooltip {
 impl LinkTooltip {
     pub(crate) fn paint(&self, frame: &mut crate::custom_terminal::Frame<'_>) {
         use ratatui::layout::Rect;
+        use ratatui::style::Color;
         use ratatui::style::Stylize;
-        use ratatui::widgets::{Clear, Paragraph, Widget, Wrap};
+        use ratatui::text::Line;
+        use ratatui::widgets::{Block, Clear, Padding, Paragraph, Widget, Wrap};
         let point = self.point;
         let area = frame.area();
         if !area.contains(point) || area.height < 3 {
             return;
         }
-        let text = format!("{}\nRight-click to copy", self.destination);
-        let paragraph = Paragraph::new(text).wrap(Wrap { trim: false }).reversed();
+        let padding = u16::from(area.width >= 6);
+        let paragraph = Paragraph::new(vec![
+            Line::from(self.destination.as_str()).fg(Color::Indexed(255)),
+            Line::from("Right-click to copy").fg(Color::Indexed(250)),
+        ])
+        .bg(Color::Indexed(236))
+        .block(Block::new().padding(Padding::horizontal(padding)))
+        .wrap(Wrap { trim: false });
         let width = area
             .width
             .min(u16::try_from(paragraph.line_width()).unwrap_or(u16::MAX))
