@@ -472,6 +472,7 @@ impl TranscriptView {
                 image: Arc::clone(image),
                 area,
                 first_row: visible.row.saturating_sub(image_start),
+                crop: None,
                 file: None,
                 terminal_id: None,
             });

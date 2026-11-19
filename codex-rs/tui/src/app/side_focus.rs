@@ -237,6 +237,10 @@ impl App {
         }
         let mut pointer_action = None;
         if let TuiEvent::Mouse(mouse) = event {
+            if self.continue_image_drag(*mouse) {
+                tui.frame_requester().schedule_frame();
+                return true;
+            }
             let point = (mouse.column, mouse.row).into();
             let frame = &self.conversation_frame;
             let over_strip = frame
