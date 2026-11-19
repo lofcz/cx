@@ -124,6 +124,7 @@ impl ComposerImages {
                     image: image.clone(),
                     area: tile,
                     first_row: 0,
+                    crop: None,
                     file: None,
                     terminal_id: None,
                 });
@@ -181,7 +182,8 @@ impl ComposerImages {
             protocol: self.protocol,
             columns: WIDTH,
             rows: HEIGHT,
-            pixels: tile,
+            pixels: Arc::new(tile),
+            encoded: None,
             cell_width,
             cell_height,
         })
