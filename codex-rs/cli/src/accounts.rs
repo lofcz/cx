@@ -219,6 +219,10 @@ pub(super) async fn dispatch(
         !transfer || command.is_none(),
         "Use auth transfer flags without a subcommand"
     );
+    // The standalone package is shared by every account.
+    if matches!(command, Some(Subcommand::Update)) && !options.account_status_json {
+        return Ok(false);
+    }
     if let Some(Subcommand::Accounts(accounts)) = command {
         manage(root, accounts, overrides).await?;
         return Ok(true);
