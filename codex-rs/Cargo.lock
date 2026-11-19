@@ -5354,6 +5354,7 @@ dependencies = [
  "diffy",
  "dirs",
  "dunce",
+ "fast_image_resize",
  "futures",
  "http 1.4.0",
  "image",
@@ -5366,6 +5367,7 @@ dependencies = [
  "objc2-foundation",
  "opentelemetry_sdk",
  "pathdiff",
+ "png",
  "pretty_assertions",
  "pulldown-cmark",
  "rand 0.9.3",
@@ -5412,6 +5414,7 @@ dependencies = [
  "winsplit",
  "wiremock",
  "zbus",
+ "zune-jpeg 0.5.12",
 ]
 
 [[package]]
@@ -7724,6 +7727,18 @@ name = "fast-srgb8"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd2e7510819d6fbf51a5545c8f922716ecfb14df168a3242f7d33e0239efe6a1"
+
+[[package]]
+name = "fast_image_resize"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9c50201dc184ba6553da1695aac20a042efffbe2d84542cee31917c86c3ab1e"
+dependencies = [
+ "cfg-if",
+ "document-features",
+ "num-traits",
+ "thiserror 2.0.18",
+]
 
 [[package]]
 name = "faster-hex"

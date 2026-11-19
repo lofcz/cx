@@ -183,23 +183,30 @@ fn is_iterm2_terminal(info: &TerminalInfo) -> bool {
 }
 
 impl ImageProtocol {
-    pub(crate) fn for_sidebar(self) -> Self {
+    pub(crate) fn for_interactive_image(self) -> Self {
         if self != Self::Sixel {
             return self;
         }
-        let info = terminal_info();
-        // KONSOLE_VERSION is YYMMpp, TERM_PROGRAM_VERSION can be dotted.
-        let supports_crop = info.name == TerminalName::Konsole
-            && info.multiplexer.is_none()
-            && info.version.as_deref().is_some_and(|version| {
-                if version.contains('.') {
-                    version_is_at_least(Some(version), (22, 4, 0))
-                } else {
-                    version.parse::<u32>().is_ok_and(|packed| packed >= 220400)
-                }
-            });
-        if supports_crop { Self::Kitty } else { self }
+        static KONSOLE_CROP: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        if *KONSOLE_CROP.get_or_init(|| konsole_supports_crop(&terminal_info())) {
+            Self::Kitty
+        } else {
+            self
+        }
     }
+}
+
+fn konsole_supports_crop(info: &TerminalInfo) -> bool {
+    // KONSOLE_VERSION is YYMMpp, TERM_PROGRAM_VERSION can be dotted.
+    info.name == TerminalName::Konsole
+        && info.multiplexer.is_none()
+        && info.version.as_deref().is_some_and(|version| {
+            if version.contains('.') {
+                version_is_at_least(Some(version), (22, 4, 0))
+            } else {
+                version.parse::<u32>().is_ok_and(|packed| packed >= 220400)
+            }
+        })
 }
 
 fn supports_kitty_graphics(info: &TerminalInfo) -> bool {
@@ -247,6 +254,10 @@ fn parse_dotted_version(version: Option<&str>) -> Option<(u64, u64, u64)> {
 
 pub fn kitty_delete_image(image_id: u32) -> String {
     wrap_for_tmux_if_needed(&format!("{ESC}_Ga=d,d=I,i={image_id},q=2;{ST}"))
+}
+
+pub(crate) fn kitty_hide_image(image_id: u32) -> String {
+    wrap_for_tmux_if_needed(&format!("{ESC}_Ga=d,d=i,i={image_id},q=2;{ST}"))
 }
 
 #[derive(Clone, Copy)]
@@ -744,6 +755,27 @@ mod tests {
             version: version.map(str::to_string),
             term: term.map(str::to_string),
             multiplexer,
+        }
+    }
+
+    #[test]
+    fn konsole_crop_requires_native_graphics_in_the_outer_terminal() {
+        for (version, expected) in [
+            ("260803", true),
+            ("22.04.0", true),
+            ("210800", false),
+            ("unknown", false),
+        ] {
+            let mut info = terminal_info_with_version_for_test(
+                TerminalName::Konsole,
+                None,
+                None,
+                Some(version),
+                None,
+            );
+            assert_eq!(konsole_supports_crop(&info), expected);
+            info.multiplexer = Some(Multiplexer::Tmux { version: None });
+            assert!(!konsole_supports_crop(&info));
         }
     }
 

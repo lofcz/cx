@@ -84,6 +84,7 @@ pub(super) struct SidebarInputState {
 
 #[derive(Default)]
 pub(super) struct SidebarPane {
+    pub(super) image_hover: super::image_hover::ImageHover,
     pub(super) creation: Option<SideCreation>,
     pub(super) close: Option<super::sidebar_close::Confirmation>,
     pub(super) files: Option<super::sidebar_files::Files>,

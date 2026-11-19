@@ -322,8 +322,8 @@ fn sidebar_focus_keeps_dim_extension_status_rows() {
     ");
 }
 
-#[test]
-fn thumbnails_fit_after_basic_footer_rows_and_before_extra_status() {
+#[tokio::test]
+async fn thumbnails_fit_after_basic_footer_rows_and_before_extra_status() {
     let mut composer = composer();
     composer.attach_image(PathBuf::from("preview.png"));
     composer.insert_str("draft");
@@ -332,6 +332,7 @@ fn thumbnails_fit_after_basic_footer_rows_and_before_extra_status() {
     composer.set_collaboration_mode_indicator(Some(CollaborationModeIndicator::Plan));
     let previews = crate::transcript_image::composer::ComposerImages::for_terminal(
         crate::pets::ImageProtocol::Kitty,
+        &crate::tui::FrameRequester::test_dummy(),
         /*previous*/ None,
     )
     .unwrap();

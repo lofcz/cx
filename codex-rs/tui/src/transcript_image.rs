@@ -15,7 +15,6 @@ use crossterm::cursor::RestorePosition;
 use crossterm::cursor::SavePosition;
 use crossterm::queue;
 use image::DynamicImage;
-use image::ImageFormat;
 use image::RgbaImage;
 use ratatui::layout::Rect;
 
@@ -63,7 +62,7 @@ pub(crate) struct TranscriptImage {
     pub(crate) columns: u16,
     pub(crate) rows: u16,
     pub(crate) pixels: Arc<RgbaImage>,
-    /// Full-frame PNG or Sixel prepared by the sidebar's background renderer.
+    /// Full-frame PNG or Sixel prepared before the terminal paints the placement.
     pub(crate) encoded: Option<Vec<u8>>,
     pub(crate) cell_width: u32,
     pub(crate) cell_height: u32,
@@ -86,6 +85,98 @@ pub(crate) fn terminal_cell_size() -> Option<(u32, u32)> {
 pub(crate) enum PreviewKind {
     Inspected,
     Generated,
+}
+
+/// A history entry keeps one bounded source thumbnail across text reflows.
+#[derive(Clone)]
+pub(crate) struct HistoryImage {
+    source: Arc<TranscriptImage>,
+    pub(crate) display: Arc<TranscriptImage>,
+    pub(crate) columns: u16,
+    pub(crate) rows: u16,
+    native_crop: bool,
+}
+
+impl HistoryImage {
+    pub(crate) fn fit(
+        path: &Path,
+        width: u16,
+        protocol: ImageProtocol,
+        kind: PreviewKind,
+        previous: Option<&Self>,
+    ) -> Option<Self> {
+        let columns = width.checked_sub(2).filter(|n| *n > 0)?;
+        let source = match previous {
+            Some(image) => Arc::clone(&image.source),
+            None => Arc::new(TranscriptImage::load(path, u16::MAX, protocol, kind)?),
+        };
+        let columns = columns.min(source.columns);
+        if let Some(previous) = previous.filter(|image| image.columns == columns) {
+            return Some(previous.clone());
+        }
+        let native_crop =
+            protocol == ImageProtocol::Kitty && crate::tui::tmux_fullscreen_image_base().is_none();
+        let pixels = &source.pixels;
+        let w = pixels.width().min(u32::from(columns) * source.cell_width);
+        let h = ((u64::from(pixels.height()) * u64::from(w) + u64::from(pixels.width() / 2))
+            / u64::from(pixels.width()))
+        .max(1) as u32;
+        let rows = h.div_ceil(source.cell_height) as u16;
+        // Native Kitty scales the uploaded thumbnail. Sixel and virtual placements
+        // need a fitted raster and can resample the bounded source in memory.
+        let display = if native_crop || w == pixels.width() {
+            Arc::clone(&source)
+        } else {
+            Arc::new(TranscriptImage {
+                protocol,
+                pixels: Arc::new(image::imageops::thumbnail(pixels.as_ref(), w, h)),
+                encoded: None,
+                columns,
+                rows,
+                cell_width: source.cell_width,
+                cell_height: source.cell_height,
+            })
+        };
+        Some(Self {
+            source,
+            display,
+            columns,
+            rows,
+            native_crop,
+        })
+    }
+
+    pub(crate) fn placement(&self, area: Rect, first_row: usize) -> ImagePlacement {
+        let crop = self.native_crop.then(|| {
+            let pixels = &self.source.pixels;
+            let y = |row: usize| (row as u32 * pixels.height()) / u32::from(self.rows);
+            let top = y(first_row);
+            image::math::Rect {
+                x: 0,
+                y: top,
+                width: pixels.width(),
+                height: y(first_row + usize::from(area.height)) - top,
+            }
+        });
+        ImagePlacement {
+            image: Arc::clone(&self.display),
+            area,
+            // A native crop names its source rows directly.
+            first_row: if self.native_crop { 0 } else { first_row },
+            crop,
+            file: None,
+            terminal_id: None,
+        }
+    }
+
+    pub(crate) fn retained_bytes(&self) -> usize {
+        self.source.pixels.len()
+            + if Arc::ptr_eq(&self.source, &self.display) {
+                0
+            } else {
+                self.display.pixels.len()
+            }
+    }
 }
 
 impl TranscriptImage {
@@ -184,7 +275,17 @@ impl TranscriptImage {
         let encoded;
         let bytes = if let Some(bytes) = &self.encoded {
             bytes.as_slice()
-        } else if let Ok(Some(slice)) = self.encode_rows(area, first_row) {
+        } else if let Ok(Some(slice)) = self.encode_rows(
+            if crop.is_some() {
+                Rect {
+                    height: self.rows,
+                    ..area
+                }
+            } else {
+                area
+            },
+            first_row,
+        ) {
             encoded = slice;
             &encoded
         } else {
@@ -249,14 +350,23 @@ impl TranscriptImage {
         if height == 0 {
             return Ok(None);
         }
-        let cropped =
-            image::imageops::crop_imm(self.pixels.as_ref(), 0, top, self.pixels.width(), height)
-                .to_image();
+        let slice;
+        let cropped = if top == 0 && height == self.pixels.height() {
+            self.pixels.as_ref()
+        } else {
+            slice = image::imageops::crop_imm(
+                self.pixels.as_ref(),
+                0,
+                top,
+                self.pixels.width(),
+                height,
+            )
+            .to_image();
+            &slice
+        };
         let bytes = match self.protocol {
             ImageProtocol::Kitty | ImageProtocol::KittyLocalFile => {
-                let mut png = std::io::Cursor::new(Vec::new());
-                DynamicImage::ImageRgba8(cropped).write_to(&mut png, ImageFormat::Png)?;
-                png.into_inner()
+                crate::image_decode::encode_png(cropped)?
             }
             ImageProtocol::Sixel => {
                 crate::pets::encode_rgba(cropped.as_raw(), cropped.width(), cropped.height())?
