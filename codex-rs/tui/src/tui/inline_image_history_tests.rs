@@ -38,16 +38,18 @@ fn preview_at(protocol: ImageProtocol, y: u16) -> ImagePlacement {
             protocol,
             columns: 2,
             rows: 1,
-            pixels: image::RgbaImage::from_pixel(
+            pixels: Arc::new(image::RgbaImage::from_pixel(
                 /*width*/ 16,
                 /*height*/ 16,
                 image::Rgba([0, 100, 200, 255]),
-            ),
+            )),
+            encoded: None,
             cell_width: 8,
             cell_height: 16,
         }),
         area: Rect::new(/*x*/ 0, y, /*width*/ 2, /*height*/ 1),
         first_row: 0,
+        crop: None,
         file: None,
         terminal_id: None,
     }
