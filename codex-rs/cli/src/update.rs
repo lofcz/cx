@@ -65,6 +65,11 @@ pub(crate) async fn run(action: UpdateAction) -> Result<UpdateOutcome> {
         ClientRouteClass::Other,
     );
     let version = latest_release_version(&http).await?;
+    let current = codex_cli::CODEX_CLI_DISPLAY_VERSION;
+    if is_release_timestamp(current) && current > version.as_str() {
+        println!("Installed CX {current} is newer than published CX {version}.");
+        return Ok(UpdateOutcome::AlreadyUpToDate);
+    }
     let release_dir = layout.releases_dir.join(format!("{version}-{target}"));
     let asset = format!("codex-package-{target}.tar.gz");
 
@@ -230,10 +235,14 @@ async fn latest_release_version(http: &RouteAwareClientPool) -> Result<String> {
         .tag_name
         .strip_prefix("rust-v")
         .context("latest CX release tag is not a fork release tag")?;
-    if version.len() != 12 || !version.bytes().all(|byte| byte.is_ascii_digit()) {
+    if !is_release_timestamp(version) {
         bail!("latest CX release version must be a 12-digit timestamp");
     }
     Ok(version.to_string())
+}
+
+fn is_release_timestamp(version: &str) -> bool {
+    version.len() == 12 && version.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 async fn fetch_checksum_manifest(http: &RouteAwareClientPool, url: &str) -> Result<String> {
