@@ -5,11 +5,12 @@ mod viewport;
 use crate::motion::MotionMode;
 use crate::tui::FrameRequester;
 use crossterm::event::{KeyEvent, MouseEvent};
-use image::imageops::{self, FilterType};
+use image::RgbaImage;
 use image::math::Rect as PixelRect;
-use image::{ImageEncoder, RgbaImage};
-use std::io::Cursor;
 use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::OnceLock;
+use std::sync::PoisonError;
 use std::time::{Duration, Instant};
 use tokio::sync::oneshot;
 use viewport::Viewport;
@@ -35,8 +36,7 @@ pub(crate) enum DocumentContent {
 }
 
 pub(crate) struct SidebarImage {
-    label: String,
-    raster: Arc<RgbaImage>,
+    source: Arc<ImageSource>,
     view: Viewport,
     // Only one rasterization may be in flight. Input updates the desired view
     // immediately and the next paint samples its latest position.
@@ -44,10 +44,17 @@ pub(crate) struct SidebarImage {
     ready: Option<Rendered>,
 }
 
+struct ImageSource {
+    label: String,
+    raster: Arc<RgbaImage>,
+    native: OnceLock<Result<Arc<TranscriptImage>, String>>,
+    last_crop: Mutex<Option<Rendered>>,
+}
+
 impl std::fmt::Debug for SidebarImage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SidebarImage")
-            .field("label", &self.label)
+            .field("label", &self.source.label)
             .finish_non_exhaustive()
     }
 }
@@ -66,26 +73,52 @@ fn supported_format(format: ImageFormat) -> bool {
 }
 
 impl SidebarImage {
-    pub(crate) fn decode(bytes: &[u8]) -> Result<Self> {
-        let reader = image::ImageReader::new(Cursor::new(bytes)).with_guessed_format()?;
-        let format = reader
-            .format()
+    pub(crate) fn decode_for_terminal(
+        bytes: &[u8],
+        protocol: Option<ImageProtocol>,
+    ) -> Result<Self> {
+        const MAX_IMAGE_BYTES: u64 = 32 * 1024 * 1024;
+        color_eyre::eyre::ensure!(
+            bytes.len() as u64 <= MAX_IMAGE_BYTES,
+            "Image file is too large"
+        );
+        let format = image::guess_format(bytes)
+            .ok()
             .filter(|format| supported_format(*format))
             .ok_or_eyre("Unsupported image format")?;
         let mut limits = image::Limits::default();
-        limits.max_alloc = Some(32 * 1024 * 1024);
-        let image = crate::image_decode::decode_oriented(reader, limits)?;
-        let (width, height) = (image.width(), image.height());
-        Ok(Self {
+        limits.max_alloc = Some(MAX_IMAGE_BYTES);
+        let (image, png) = crate::image_decode::sidebar_pixels(bytes, format, limits)?;
+        let (width, height) = image.dimensions();
+        let source = Arc::new(ImageSource {
             label: format!(
                 "{} · {width} × {height}",
                 format.extensions_str()[0].to_ascii_uppercase()
             ),
-            raster: Arc::new(image.into_rgba8()),
+            raster: Arc::new(image),
+            native: OnceLock::new(),
+            last_crop: Mutex::default(),
+        });
+        if protocol.map(ImageProtocol::for_interactive_image) == Some(ImageProtocol::Kitty)
+            && crate::tui::tmux_fullscreen_image_base().is_none()
+        {
+            let _ = source.native(png.map(|bytes| bytes.into_owned()));
+        }
+        Ok(Self::new_view(source))
+    }
+
+    fn new_view(source: Arc<ImageSource>) -> Self {
+        let (width, height) = source.raster.dimensions();
+        Self {
+            source,
             view: Viewport::new(width, height),
             pending: None,
             ready: None,
-        })
+        }
+    }
+
+    pub(crate) fn fork(&self) -> Self {
+        Self::new_view(Arc::clone(&self.source))
     }
 
     pub(crate) fn mouse(&mut self, event: MouseEvent) -> bool {
@@ -104,7 +137,9 @@ impl SidebarImage {
         motion: MotionMode,
         frames: &FrameRequester,
     ) -> Option<ImagePlacement> {
-        Line::from(self.label.as_str()).dim().render(area, buf);
+        Line::from(self.source.label.as_str())
+            .dim()
+            .render(area, buf);
         let available_rows = area.height.saturating_sub(1 + u16::from(area.height > 2));
         let virtual_placement = crate::tui::tmux_fullscreen_image_base().is_some();
         // tmux uses Kitty's virtual placements. The shared placeholder renderer
@@ -118,12 +153,15 @@ impl SidebarImage {
         if body.is_empty() {
             return None;
         }
-        let display = protocol.map(ImageProtocol::for_sidebar).and_then(|p| {
-            Some((
-                p,
-                terminal_cell_size().or_else(|| (p != ImageProtocol::Sixel).then_some((8, 16)))?,
-            ))
-        });
+        let display = protocol
+            .map(ImageProtocol::for_interactive_image)
+            .and_then(|p| {
+                Some((
+                    p,
+                    terminal_cell_size()
+                        .or_else(|| (p != ImageProtocol::Sixel).then_some((8, 16)))?,
+                ))
+            });
         let Some((protocol, (cw, ch))) = display else {
             Line::from("Image preview unavailable in this terminal").render(body, buf);
             return None;
@@ -137,7 +175,7 @@ impl SidebarImage {
         let fit = if self.view.fitting() { " · Fit" } else { "" };
         Line::from(format!(
             "{} · {:.0}%{fit}",
-            self.label,
+            self.source.label,
             self.view.scale() * 100.0
         ))
         .dim()
@@ -163,17 +201,37 @@ impl SidebarImage {
                 Err(oneshot::error::TryRecvError::Empty) => {}
             }
         }
+        if self.ready.as_ref().is_none_or(|r| r.plan != plan)
+            && let Some(prepared) = self.source.prepared(plan)
+        {
+            self.ready = Some(prepared);
+        }
         if self.pending.is_none() && self.ready.as_ref().is_none_or(|r| r.plan != plan) {
             let (tx, rx) = oneshot::channel();
             self.pending = Some(rx);
-            let source = self.raster.clone();
+            let source = Arc::clone(&self.source);
             let frames = frames.clone();
             tokio::task::spawn_blocking(move || {
-                let result = plan
-                    .render(source)
-                    .map(Arc::new)
-                    .map_err(|err| err.to_string());
-                if tx.send(Rendered { plan, result }).is_ok() {
+                let result = match plan {
+                    RenderPlan::Native => source.native(None).clone(),
+                    RenderPlan::Raster {
+                        protocol,
+                        crop,
+                        pixels,
+                        cell,
+                    } => source
+                        .render_crop(protocol, crop, pixels, cell)
+                        .map(Arc::new)
+                        .map_err(|err| err.to_string()),
+                };
+                let done = Rendered { plan, result };
+                if plan != RenderPlan::Native {
+                    *source
+                        .last_crop
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner) = Some(done.clone());
+                }
+                if tx.send(done).is_ok() {
                     frames.schedule_frame();
                 }
             });
@@ -220,6 +278,7 @@ impl SidebarImage {
     }
 }
 
+#[derive(Clone)]
 struct Rendered {
     plan: RenderPlan,
     result: Result<Arc<TranscriptImage>, String>,
@@ -238,60 +297,92 @@ enum RenderPlan {
     },
 }
 
-impl RenderPlan {
-    fn render(self, source: Arc<RgbaImage>) -> Result<TranscriptImage> {
-        let (protocol, raster, cell) = match self {
-            Self::Native => {
-                let cell = [source.width(), source.height()];
-                (ImageProtocol::Kitty, source, cell)
-            }
-            Self::Raster {
-                protocol,
-                crop,
-                pixels: [width, height],
-                cell,
-            } => {
-                // The terminal reports physical dimensions. Protect the allocation
-                // if a stale window-size report describes an implausibly large panel.
-                color_eyre::eyre::ensure!(
-                    u64::from(width) * u64::from(height) <= 16 * 1024 * 1024,
-                    "Image viewport is too large"
-                );
-                let visible =
-                    imageops::crop_imm(source.as_ref(), crop.x, crop.y, crop.width, crop.height);
-                (
-                    protocol,
-                    Arc::new(imageops::resize(
-                        &*visible,
-                        width,
-                        height,
-                        FilterType::Triangle,
-                    )),
-                    cell,
-                )
-            }
-        };
+impl ImageSource {
+    fn prepared(&self, plan: RenderPlan) -> Option<Rendered> {
+        match plan {
+            RenderPlan::Native => self.native.get().map(|result| Rendered {
+                plan,
+                result: result.clone(),
+            }),
+            RenderPlan::Raster { .. } => self
+                .last_crop
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .as_ref()
+                .filter(|cached| cached.plan == plan)
+                .cloned(),
+        }
+    }
+
+    fn native(&self, png: Option<Vec<u8>>) -> &Result<Arc<TranscriptImage>, String> {
+        self.native.get_or_init(|| {
+            let encoded = match png {
+                Some(bytes) => bytes,
+                None => crate::image_decode::encode_png(&self.raster)
+                    .map_err(|error| error.to_string())?,
+            };
+            Ok(Arc::new(TranscriptImage {
+                protocol: ImageProtocol::Kitty,
+                columns: 1,
+                rows: 1,
+                pixels: Arc::clone(&self.raster),
+                encoded: Some(encoded),
+                cell_width: self.raster.width(),
+                cell_height: self.raster.height(),
+            }))
+        })
+    }
+
+    fn render_crop(
+        &self,
+        protocol: ImageProtocol,
+        crop: PixelRect,
+        [width, height]: [u32; 2],
+        cell: [u32; 2],
+    ) -> Result<TranscriptImage> {
+        let raster = crate::image_decode::resize_crop(&self.raster, crop, width, height)?;
         let encoded = if protocol == ImageProtocol::Sixel {
             crate::pets::encode_rgba(&raster, raster.width(), raster.height())
                 .map_err(|e| color_eyre::eyre::eyre!("{e}"))?
         } else {
-            let mut png = Vec::new();
-            image::codecs::png::PngEncoder::new(&mut png).write_image(
-                &raster,
-                raster.width(),
-                raster.height(),
-                image::ExtendedColorType::Rgba8,
-            )?;
-            png
+            crate::image_decode::encode_png(&raster)?
         };
         Ok(TranscriptImage {
             protocol,
             columns: raster.width().div_ceil(cell[0]) as u16,
             rows: raster.height().div_ceil(cell[1]) as u16,
-            pixels: raster,
+            pixels: Arc::new(raster),
             encoded: Some(encoded),
             cell_width: cell[0],
             cell_height: cell[1],
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::KeyCode;
+
+    #[test]
+    fn fork_shares_prepared_native_pixels_with_a_fresh_view() {
+        let raster = RgbaImage::from_pixel(16, 8, image::Rgba([1, 20, 39, 128]));
+        let bytes = crate::image_decode::encode_png(&raster).unwrap();
+        let mut original =
+            SidebarImage::decode_for_terminal(&bytes, Some(ImageProtocol::Kitty)).unwrap();
+        let prepared = Arc::clone(original.source.native(None).as_ref().unwrap());
+        original.view.layout(Rect::new(0, 0, 8, 4), [8, 16], false);
+        original.key(KeyCode::Char('1').into());
+        let peek = original.fork();
+        assert!(peek.view.fitting());
+        assert!(!original.view.fitting());
+        assert!(Arc::ptr_eq(&original.source, &peek.source));
+        let warm = peek
+            .source
+            .prepared(RenderPlan::Native)
+            .unwrap()
+            .result
+            .unwrap();
+        assert!(Arc::ptr_eq(&prepared, &warm));
     }
 }

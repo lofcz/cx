@@ -55,7 +55,6 @@ pub(super) struct DividerDrag {
     press: u16,
     initial_width: u16,
     width: u16,
-    guide_only: bool,
 }
 
 impl DividerDrag {
@@ -175,7 +174,9 @@ pub(super) fn sidebar_areas(app: &App, tui: &Tui, area: Rect, fraction: f64) -> 
     let preview = app
         .divider_drag
         .filter(|drag| {
-            !drag.guide_only && drag.matches(area, app) && app.conversation_focus_available(tui)
+            drag.screen == area
+                && Some(drag.target) == target
+                && app.conversation_focus_available(tui)
         })
         .map(|drag| drag.width);
     let saved = app.local_settings.tui.sidebar_width_percent;
@@ -197,9 +198,16 @@ pub(super) fn sidebar_areas(app: &App, tui: &Tui, area: Rect, fraction: f64) -> 
     let open = target.is_some();
     let child_width = ((f64::from(child_width) * fraction).round() as u16).max(u16::from(open));
     (child_width > 0).then(|| {
-        Layout::horizontal([Constraint::Fill(1), Constraint::Length(child_width)])
-            .spacing(GAP)
-            .areas(area)
+        let main = Rect {
+            width: area.width.saturating_sub(child_width + GAP),
+            ..area
+        };
+        let child = Rect {
+            x: area.right() - child_width,
+            width: child_width,
+            ..area
+        };
+        [main, child]
     })
 }
 
@@ -378,7 +386,10 @@ impl App {
     ) -> Result<bool> {
         let mouse = match event {
             TuiEvent::Mouse(mouse) if self.conversation_focus_available(tui) => mouse,
-            TuiEvent::Draw if self.conversation_focus_available(tui) => return Ok(false),
+            // Click-to-focus terminals can report focus gained immediately after the press.
+            TuiEvent::Draw | TuiEvent::FocusGained if self.conversation_focus_available(tui) => {
+                return Ok(false);
+            }
             _ => {
                 if self.divider_drag.take().is_some() {
                     tui.frame_requester().schedule_frame();
@@ -414,9 +425,6 @@ impl App {
                     press: mouse.column,
                     initial_width: width,
                     width,
-                    // Both panes share the divider. Reflowing either can move terminal-owned
-                    // image pixels across it, so defer both layouts until release.
-                    guide_only: !tui.retained_images.is_empty(),
                 });
                 self.cancel_pending_key_chord();
             }
@@ -425,18 +433,28 @@ impl App {
                     return Ok(false);
                 };
                 let screen = tui.terminal.last_known_screen_size.into();
+                // Draws consume the latest width. Only release needs to revalidate the
+                // complete split before writing the preference.
                 if drag.matches(self.workspace_chat_area(screen), self)
-                    && visible_split(self, tui, screen).is_some()
+                    && (mouse.kind == Drag(Left) || visible_split(self, tui, screen).is_some())
                 {
                     let width = i32::from(drag.initial_width) + i32::from(drag.press)
                         - i32::from(mouse.column);
                     let total = drag.screen.width;
                     let width = sidebar_width(width, total);
-                    let changed = drag.width != width;
+                    let previous_width = drag.width;
                     drag.width = width;
                     if mouse.kind == Drag(Left) {
                         self.divider_drag = Some(drag);
-                        if !changed {
+                        // A motion already requested a draw if its width has yet to be painted.
+                        if width == previous_width
+                            || self
+                                .conversation_frame
+                                .divider_area()
+                                .is_some_and(|divider| {
+                                    drag.screen.right() - divider.right() != previous_width
+                                })
+                        {
                             return Ok(true);
                         }
                     } else if let Some(percent) = drag.percent()
@@ -563,25 +581,12 @@ pub(super) fn paint_divider(
     drag: Option<DividerDrag>,
     highlight_divider: bool,
 ) {
-    // Draw after both panes registered their images. Clearing a guide to the left
-    // of retained pixels can erase the rest of that terminal row.
-    let guide = drag
-        .filter(|drag| drag.guide_only)
-        .map_or(divider, |drag| drag.screen.right() - drag.width - GAP);
     let style = if highlight_divider || drag.is_some() {
         crate::style::accent_style()
     } else {
         ratatui::style::Style::default().dim()
     };
     for y in frame.area().y..frame.area().bottom() {
-        let x = if guide != divider
-            && frame.image_placements.iter().any(|image| {
-                (image.area.y..image.area.bottom()).contains(&y) && guide < image.area.right()
-            }) {
-            divider
-        } else {
-            guide
-        };
-        frame.buffer[(x, y)].set_symbol("│").set_style(style);
+        frame.buffer[(divider, y)].set_symbol("│").set_style(style);
     }
 }

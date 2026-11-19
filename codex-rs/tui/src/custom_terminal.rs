@@ -21,11 +21,16 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
+use std::collections::VecDeque;
+use std::hash::Hash;
 use std::io;
 use std::io::Write;
+use std::sync::Arc;
+use std::sync::Weak;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
+use crate::transcript_image::TranscriptImage;
 use crossterm::cursor::MoveTo;
 use crossterm::cursor::RestorePosition;
 use crossterm::cursor::SavePosition;
@@ -139,6 +144,38 @@ impl Frame<'_> {
     }
 }
 
+const MAX_HIDDEN_UPLOADS: usize = 4;
+const MAX_HIDDEN_PIXEL_BYTES: usize = 64 * 1024 * 1024;
+
+/// Cropped native placements use the original raster as their upload identity. The
+/// document owns the pixels, even when its terminal upload survives switching tabs.
+#[derive(Debug, Clone)]
+struct NativeUpload {
+    id: u32,
+    source: Weak<TranscriptImage>,
+    hidden: bool,
+}
+
+impl NativeUpload {
+    fn identity(&self) -> (u32, *const TranscriptImage, bool) {
+        (self.id, self.source.as_ptr(), self.hidden)
+    }
+}
+
+impl PartialEq for NativeUpload {
+    fn eq(&self, other: &Self) -> bool {
+        self.identity() == other.identity()
+    }
+}
+
+impl Eq for NativeUpload {}
+
+impl Hash for NativeUpload {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.identity().hash(state);
+    }
+}
+
 #[derive(Debug, Default, Clone, Eq, PartialEq, Hash)]
 pub struct Terminal<B>
 where
@@ -147,6 +184,7 @@ where
     /// The backend used to interface with the terminal
     backend: B,
     pub(crate) tmux_kitty_image_base: Option<u32>,
+    native_uploads: VecDeque<NativeUpload>,
     /// Holds the results of the current and previous draw calls. The two are compared at the end
     /// of each draw pass to output the necessary updates to the terminal
     buffers: [Buffer; 2],
@@ -178,6 +216,7 @@ where
     B: Write,
 {
     fn drop(&mut self) {
+        let _ = self.clear_native_uploads();
         // Attempt to restore the cursor state
         if self.cursor_style_changed
             && let Err(err) = self.reset_cursor_style()
@@ -240,6 +279,7 @@ where
         Self {
             backend,
             tmux_kitty_image_base: None,
+            native_uploads: VecDeque::new(),
             buffers: [Buffer::empty(Rect::ZERO), Buffer::empty(Rect::ZERO)],
             current: 0,
             hidden_cursor: false,
@@ -377,7 +417,7 @@ where
         images: &mut Vec<crate::transcript_image::ImagePlacement>,
     ) -> io::Result<()> {
         if images.is_empty() {
-            return Ok(());
+            return self.clear_native_uploads();
         }
         let text = self.previous_buffer().clone();
         let cursor = (!self.hidden_cursor).then_some(self.last_known_cursor_pos);
@@ -390,7 +430,78 @@ where
                 frame.set_cursor_position(cursor);
                 frame.set_cursor_style(style);
             }
-        })
+        })?;
+        self.clear_native_uploads()
+    }
+
+    fn clear_native_uploads(&mut self) -> io::Result<()> {
+        if self.native_uploads.is_empty() {
+            return Ok(());
+        }
+        while let Some(upload) = self.native_uploads.back() {
+            self.backend
+                .write_all(crate::pets::kitty_delete_image(upload.id).as_bytes())?;
+            self.native_uploads.pop_back();
+        }
+        Write::flush(&mut self.backend)
+    }
+
+    fn has_native_upload(&self, id: Option<u32>) -> bool {
+        self.native_uploads
+            .iter()
+            .any(|upload| Some(upload.id) == id)
+    }
+
+    fn remove_kitty_placement(&mut self, id: u32) -> io::Result<()> {
+        let index = self
+            .native_uploads
+            .iter()
+            .position(|upload| upload.id == id);
+        // The retiring placement itself still holds one reference.
+        if let Some(index) = index
+            && self.native_uploads[index].source.strong_count() > 1
+        {
+            self.backend
+                .write_all(crate::pets::kitty_hide_image(id).as_bytes())?;
+            let mut upload = self
+                .native_uploads
+                .remove(index)
+                .expect("existing native upload");
+            upload.hidden = true;
+            self.native_uploads.push_back(upload);
+        } else {
+            self.backend
+                .write_all(crate::pets::kitty_delete_image(id).as_bytes())?;
+            if let Some(index) = index {
+                self.native_uploads.remove(index);
+            }
+        }
+        Ok(())
+    }
+
+    fn trim_hidden_uploads(&mut self) -> io::Result<()> {
+        let mut count = 0;
+        let mut bytes_left = MAX_HIDDEN_PIXEL_BYTES;
+        // Most recently hidden last. Oversized rasters and closed documents relinquish
+        // their IDs immediately, regardless of the remaining entry budget.
+        for index in (0..self.native_uploads.len()).rev() {
+            let upload = &self.native_uploads[index];
+            if !upload.hidden {
+                continue;
+            }
+            if count < MAX_HIDDEN_UPLOADS
+                && let Some(image) = upload.source.upgrade()
+                && let Some(remaining) = bytes_left.checked_sub(image.pixels.as_raw().len())
+            {
+                bytes_left = remaining;
+                count += 1;
+                continue;
+            }
+            self.backend
+                .write_all(crate::pets::kitty_delete_image(upload.id).as_bytes())?;
+            self.native_uploads.remove(index);
+        }
+        Ok(())
     }
 
     /// Draws a single frame using a screen size already obtained by the caller.
@@ -434,28 +545,49 @@ where
         } else if !retained_images.is_empty() {
             self.invalidate_viewport();
         }
-        let mut moved = Vec::new();
+        // A placement can move while visible, or return from a hidden document upload.
+        // Only the former needs its old cursor placement removed.
+        let mut place = Vec::new();
         // iTerm2 can discard the pixel data when a placement is removed. Redraw it
         // from the source in that terminal, and keep the fast path for native Kitty.
-        if !tmux
+        let can_reposition = !tmux
             && codex_terminal_detection::terminal_info().name
-                != codex_terminal_detection::TerminalName::Iterm2
-        {
+                != codex_terminal_detection::TerminalName::Iterm2;
+        let native_crop = |image: &crate::transcript_image::ImagePlacement| {
+            can_reposition
+                && image.image.protocol == crate::pets::ImageProtocol::Kitty
+                && image.crop.is_some()
+        };
+        if can_reposition {
             for (index, image) in images.iter_mut().enumerate() {
                 if image.terminal_id.is_none()
                     && image.image.protocol != crate::pets::ImageProtocol::Sixel
                     && let Some(previous) = retained_images.iter().position(|old| {
                         std::sync::Arc::ptr_eq(&old.image, &image.image)
                             && old.first_row == image.first_row
-                            && (old.area.as_size() == image.area.as_size()
-                                || (old.crop.is_some() && image.crop.is_some()))
+                            && match (old.crop, image.crop) {
+                                (Some(_), Some(_)) => true,
+                                (None, None) => old.area.as_size() == image.area.as_size(),
+                                _ => false,
+                            }
                     })
                 {
                     let mut old = retained_images.swap_remove(previous);
                     old.area = image.area;
                     old.crop = image.crop;
                     *image = old;
-                    moved.push(index);
+                    if !native_crop(image) || self.has_native_upload(image.terminal_id) {
+                        place.push((index, true));
+                    }
+                } else if image.terminal_id.is_none()
+                    && native_crop(image)
+                    && let Some(upload) = self.native_uploads.iter_mut().find(|upload| {
+                        upload.hidden && upload.source.as_ptr() == Arc::as_ptr(&image.image)
+                    })
+                {
+                    upload.hidden = false;
+                    image.terminal_id = Some(upload.id);
+                    place.push((index, false));
                 }
             }
         }
@@ -463,8 +595,7 @@ where
             match old.image.protocol {
                 crate::pets::ImageProtocol::Kitty | crate::pets::ImageProtocol::KittyLocalFile => {
                     if let Some(id) = old.terminal_id {
-                        self.backend
-                            .write_all(crate::pets::kitty_delete_image(id).as_bytes())?;
+                        self.remove_kitty_placement(id)?;
                     }
                 }
                 crate::pets::ImageProtocol::Sixel if old.image.encoded.is_some() => {
@@ -478,6 +609,7 @@ where
                 crate::pets::ImageProtocol::Sixel => self.invalidate_viewport(),
             }
         }
+        self.trim_hidden_uploads()?;
 
         // A text clear, focus highlight, or full repaint can erase an otherwise stable image.
         let updates = diff_buffers(self.previous_buffer(), self.current_buffer());
@@ -489,21 +621,29 @@ where
                 while images
                     .iter()
                     .any(|other| other.terminal_id == Some(next_id))
+                    || self.has_native_upload(Some(next_id))
                 {
                     next_id += 1;
                 }
                 images[index].terminal_id = Some(next_id);
                 redraw.push(index);
                 next_id += 1;
-            } else if !moved.contains(&index)
-                && updates.iter().any(|update| match update {
-                    DrawCommand::Put { x, y, .. } => image.area.contains((*x, *y).into()),
-                    DrawCommand::ClearToEnd { x, y, .. } => {
-                        (image.area.y..image.area.bottom()).contains(y) && *x < image.area.right()
-                    }
-                })
-            {
+            } else if place.iter().any(|&(placed, _)| placed == index) {
+                continue;
+            } else if native_crop(image) && !self.has_native_upload(image.terminal_id) {
+                // An explicit screen clear also invalidated the uploaded pixels.
                 redraw.push(index);
+            } else if updates.iter().any(|update| match update {
+                DrawCommand::Put { x, y, .. } => image.area.contains((*x, *y).into()),
+                DrawCommand::ClearToEnd { x, y, .. } => {
+                    (image.area.y..image.area.bottom()).contains(y) && *x < image.area.right()
+                }
+            }) {
+                if native_crop(image) {
+                    place.push((index, true));
+                } else {
+                    redraw.push(index);
+                }
             }
         }
         if !updates.is_empty() && !self.hidden_cursor {
@@ -511,7 +651,7 @@ where
         }
         self.flush_updates(updates)?;
         *retained_images = images;
-        for index in moved {
+        for (index, moving) in place {
             let image = &retained_images[index];
             let id = image
                 .terminal_id
@@ -522,7 +662,7 @@ where
                 MoveTo(image.area.x, image.area.y)
             )?;
             self.backend.write_all(
-                crate::pets::kitty_place_image(id, image.area, image.crop, true).as_bytes(),
+                crate::pets::kitty_place_image(id, image.area, image.crop, moving).as_bytes(),
             )?;
             queue!(self.backend, RestorePosition)?;
         }
@@ -546,6 +686,13 @@ where
                     kitty_placement,
                 )
                 .map_err(io::Error::other)?;
+            if native_crop(placement) {
+                self.native_uploads.push_back(NativeUpload {
+                    id,
+                    source: Arc::downgrade(&placement.image),
+                    hidden: false,
+                });
+            }
         }
 
         match cursor_position {
@@ -622,13 +769,14 @@ where
     /// Clear the terminal and force a full redraw on the next draw call.
     pub fn clear(&mut self) -> io::Result<()> {
         if self.viewport_area.is_empty() {
-            return Ok(());
+            return self.clear_native_uploads();
         }
         self.clear_after_position(self.viewport_area.as_position())
     }
 
     /// Clear from `position` through the end of the visible screen and force a full redraw.
     pub(crate) fn clear_after_position(&mut self, position: Position) -> io::Result<()> {
+        self.clear_native_uploads()?;
         self.backend.set_cursor_position(position)?;
         self.backend.clear_region(ClearType::AfterCursor)?;
         // Reset the back buffer to make sure the next update will redraw everything.
@@ -662,6 +810,7 @@ where
 
     /// Clear the entire visible screen (not just the viewport) and force a full redraw.
     pub fn clear_visible_screen(&mut self) -> io::Result<()> {
+        self.clear_native_uploads()?;
         let home = Position { x: 0, y: 0 };
         // Some terminals (notably Terminal.app) behave more reliably if we pair ED2
         // with an explicit cursor-home before/after, matching the common `clear`
@@ -680,6 +829,7 @@ where
     /// Some terminals behave more reliably when purge + clear are emitted as a
     /// single ANSI sequence instead of separate backend commands.
     pub fn clear_scrollback_and_visible_screen_ansi(&mut self) -> io::Result<()> {
+        self.clear_native_uploads()?;
         if self.viewport_area.is_empty() {
             return Ok(());
         }
@@ -1247,6 +1397,148 @@ mod tests {
         assert!(output.contains(",x=52,y=0,w=96,h=120,c=20,r=6"));
         terminal.clear_frame_images(&mut retained).unwrap();
         assert!(terminal.backend().output().contains("_Ga=d,d=I,"));
+    }
+
+    #[test]
+    fn native_uploads_survive_tab_switches_and_leave_with_their_owner() {
+        use crate::transcript_image::ImagePlacement;
+
+        let document = || ImagePlacement {
+            image: Arc::new(TranscriptImage {
+                protocol: crate::pets::ImageProtocol::Kitty,
+                columns: 1,
+                rows: 1,
+                cell_width: 8,
+                cell_height: 16,
+                pixels: Arc::new(image::RgbaImage::new(8, 16)),
+                encoded: Some(b"PNG".to_vec()),
+            }),
+            area: Rect::new(2, 2, 6, 3),
+            crop: Some(image::math::Rect {
+                x: 0,
+                y: 0,
+                width: 8,
+                height: 16,
+            }),
+            first_row: 0,
+            terminal_id: None,
+            file: None,
+        };
+        let a = document();
+        let b = document();
+        let mut thumbnail = document();
+        thumbnail.area.x = 20;
+        thumbnail.crop = None;
+        let mut terminal = Terminal::with_options(CaptureBackend::new(40, 12)).unwrap();
+        let size = terminal.last_known_screen_size;
+        terminal.set_viewport_area(size.into());
+        let mut retained = Vec::new();
+        let present = |terminal: &mut Terminal<CaptureBackend>,
+                       retained: &mut Vec<ImagePlacement>,
+                       images: &[&ImagePlacement],
+                       text: &str| {
+            let start = terminal.backend().output.len();
+            terminal
+                .draw_with_size(size, retained, |frame| {
+                    frame
+                        .image_placements
+                        .extend(images.iter().map(|p| p.registration()));
+                    frame.buffer.set_string(2, 2, text, Style::default());
+                })
+                .unwrap();
+            String::from_utf8_lossy(&terminal.backend().output[start..]).into_owned()
+        };
+        present(&mut terminal, &mut retained, &[&a, &thumbnail], "");
+        let a_id = retained[0].terminal_id.unwrap();
+        let thumbnail_id = retained[1].terminal_id.unwrap();
+        let switch = present(&mut terminal, &mut retained, &[&b, &thumbnail], "");
+        let b_id = retained[0].terminal_id.unwrap();
+        assert_ne!(a_id, b_id);
+        assert!(switch.contains(&crate::pets::kitty_hide_image(a_id)));
+        assert_eq!(switch.matches("_Ga=t,").count(), 1);
+
+        let back = present(&mut terminal, &mut retained, &[&a], "");
+        assert_eq!(retained[0].terminal_id, Some(a_id));
+        assert!(back.contains(&crate::pets::kitty_hide_image(b_id)));
+        assert!(back.contains(&crate::pets::kitty_delete_image(thumbnail_id)));
+        assert!(back.contains("_Ga=p,") && !back.contains("_Ga=t,"));
+        drop(b);
+        let repaint = present(&mut terminal, &mut retained, &[&a], "selection");
+        assert!(repaint.contains(&crate::pets::kitty_delete_image(b_id)));
+        assert!(repaint.contains("_Ga=p,") && !repaint.contains("_Ga=t,"));
+        // An explicit screen clear forgets the terminal's pixel state as well.
+        terminal.clear().unwrap();
+        let after_clear = present(&mut terminal, &mut retained, &[&a], "selection");
+        assert!(after_clear.contains("_Ga=t,"));
+        present(&mut terminal, &mut retained, &[], "");
+        assert!(retained.is_empty());
+        let before = terminal.backend().output.len();
+        terminal.clear_frame_images(&mut retained).unwrap();
+        assert!(
+            String::from_utf8_lossy(&terminal.backend().output[before..])
+                .contains(&crate::pets::kitty_delete_image(a_id))
+        );
+        assert!(terminal.native_uploads.is_empty());
+    }
+
+    #[test]
+    fn hidden_native_uploads_evict_oldest_by_count_and_decoded_bytes() {
+        let mut terminal = Terminal::with_options(CaptureBackend::new(40, 12)).unwrap();
+        for (width, height, count, expected) in [
+            (1, 1, MAX_HIDDEN_UPLOADS + 1, MAX_HIDDEN_UPLOADS),
+            // Four decoded copies exceed the 64 MiB terminal budget.
+            (2049, 2048, 4, 3),
+        ] {
+            let raster = Arc::new(TranscriptImage {
+                protocol: crate::pets::ImageProtocol::Kitty,
+                columns: 1,
+                rows: 1,
+                cell_width: width,
+                cell_height: height,
+                pixels: Arc::new(image::RgbaImage::new(width, height)),
+                encoded: Some(b"small compressed payload".to_vec()),
+            });
+            for id in 1..=count as u32 {
+                terminal.native_uploads.push_back(NativeUpload {
+                    id,
+                    source: Arc::downgrade(&raster),
+                    hidden: true,
+                });
+            }
+            terminal.trim_hidden_uploads().unwrap();
+            assert_eq!(terminal.native_uploads.len(), expected);
+            assert_eq!(terminal.native_uploads.front().unwrap().id, 2);
+            assert!(
+                terminal
+                    .backend()
+                    .output()
+                    .contains(&crate::pets::kitty_delete_image(1))
+            );
+            terminal.clear_native_uploads().unwrap();
+        }
+    }
+
+    #[test]
+    fn terminal_drop_deletes_visible_and_hidden_native_uploads() {
+        let mut output = Vec::new();
+        {
+            let backend = ratatui::backend::CrosstermBackend::new(&mut output);
+            let mut terminal = Terminal::with_screen_size_and_cursor_position(
+                backend,
+                Size::new(40, 12),
+                Position::new(0, 0),
+            );
+            for (id, hidden) in [(7, false), (8, true)] {
+                terminal.native_uploads.push_back(NativeUpload {
+                    id,
+                    hidden,
+                    source: Weak::new(),
+                });
+            }
+        }
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("_Ga=d,d=I,i=7,"));
+        assert!(output.contains("_Ga=d,d=I,i=8,"));
     }
 
     impl Backend for CaptureBackend {

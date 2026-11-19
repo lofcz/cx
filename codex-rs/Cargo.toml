@@ -418,6 +418,7 @@ ed25519-dalek = { version = "2.2.0", features = ["pkcs8"] }
 encoding_rs = "0.8.35"
 eventsource-stream = "0.2.3"
 file-id = "0.2.3"
+fast_image_resize = { version = "6.1.0", features = ["only_u8x4"] }
 flate2 = "1.1.8"
 futures = { version = "0.3", default-features = false }
 gethostname = "1.1.0"
@@ -619,6 +620,7 @@ zip = { version = "9.0.0", default-features = false, features = [
     "zstd",
 ] }
 zstd = "0.13"
+zune-jpeg = "0.5.12"
 
 wiremock = "0.6"
 zeroize = "1.8.2"
@@ -676,6 +678,19 @@ ignored = [
 # The test profile inherits dev. Keep source locations in ordinary builds;
 # use CARGO_PROFILE_DEV_DEBUG=full (or CARGO_PROFILE_TEST_DEBUG=full) for locals.
 debug = "line-tables-only"
+
+# Keep interactive image loading and viewport changes responsive in local CLI builds.
+[profile.dev.package.fast_image_resize]
+opt-level = 3
+
+[profile.dev.package.fdeflate]
+opt-level = 3
+
+[profile.dev.package.png]
+opt-level = 3
+
+[profile.dev.package."zune-jpeg:0.5.12"]
+opt-level = 3
 
 [profile.dev-small]
 inherits = "dev"

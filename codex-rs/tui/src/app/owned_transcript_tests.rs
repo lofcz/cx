@@ -2236,6 +2236,24 @@ async fn fullscreen_composer_scrolls_without_moving_caret_or_transcript() -> Res
     Ok(())
 }
 
+async fn render_composer_thumbnails(
+    app: &mut App,
+    tui: &mut tui::Tui,
+    size: Size,
+    ready: impl Fn(&[crate::transcript_image::ImagePlacement]) -> bool,
+) -> Result<()> {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            app.render_chat_widget_frame(tui, size)?;
+            if ready(&tui.retained_images) {
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+    })
+    .await?
+}
+
 #[tokio::test]
 async fn composer_thumbnails_follow_draft_deletion_and_resize() -> Result<()> {
     use crate::custom_terminal::test_support::last_rendered_buffer;
@@ -2266,7 +2284,7 @@ async fn composer_thumbnails_follow_draft_deletion_and_resize() -> Result<()> {
             .attach_image(banner.clone(), ClipboardPasteContext::Composer);
 
         let narrow = Size::new(/*width*/ 20, /*height*/ 24);
-        app.render_chat_widget_frame(&mut tui, narrow)?;
+        render_composer_thumbnails(&mut app, &mut tui, narrow, |tiles| tiles.len() == 2).await?;
         let placements = &tui.retained_images;
         assert_eq!(placements.len(), 2);
         let pixels = &placements[0].image.pixels;
@@ -2309,6 +2327,38 @@ async fn composer_thumbnails_follow_draft_deletion_and_resize() -> Result<()> {
         app.render_chat_widget_frame(&mut tui, wide)?;
         assert_eq!(tui.retained_images.len(), 3);
         let portrait_image = tui.retained_images[1].image.clone();
+        // Dialog backdrops and other offscreen buffers may be rendered without ever
+        // presenting their image registrations to the terminal.
+        let mut backdrop = Buffer::empty(wide.into());
+        app.chat_widget.render(backdrop.area, &mut backdrop);
+        assert_eq!(
+            app.chat_widget
+                .composer_images
+                .as_ref()
+                .unwrap()
+                .placements
+                .borrow()
+                .len(),
+            3
+        );
+        app.prepare_frame_images(&tui);
+        assert!(
+            app.chat_widget
+                .composer_images
+                .as_ref()
+                .unwrap()
+                .placements
+                .borrow()
+                .is_empty()
+        );
+        // A divider drag can hide the whole strip for a frame. Restoring the width
+        // reuses the prepared tile immediately, including its terminal payload.
+        app.render_chat_widget_frame(&mut tui, Size::new(8, wide.height))?;
+        assert!(tui.retained_images.is_empty());
+        app.render_chat_widget_frame(&mut tui, wide)?;
+        assert_eq!(tui.retained_images.len(), 3);
+        assert!(Arc::ptr_eq(&tui.retained_images[1].image, &portrait_image));
+        assert!(portrait_image.encoded.is_some());
         app.chat_widget.handle_key_event(KeyCode::Home.into());
         app.chat_widget.handle_key_event(KeyCode::Delete.into());
         app.render_chat_widget_frame(&mut tui, wide)?;
@@ -2316,7 +2366,10 @@ async fn composer_thumbnails_follow_draft_deletion_and_resize() -> Result<()> {
         assert_eq!(tui.retained_images[0].image.pixels, portrait_image.pixels);
         // A draft submits the current file, even if it was replaced since attachment.
         image::RgbaImage::from_pixel(/*width*/ 2, /*height*/ 2, red).save(&portrait)?;
-        app.render_chat_widget_frame(&mut tui, wide)?;
+        render_composer_thumbnails(&mut app, &mut tui, wide, |tiles| {
+            tiles.len() == 2 && tiles[0].image.pixels.pixels().any(|pixel| *pixel == red)
+        })
+        .await?;
         let updated = &tui.retained_images[0].image.pixels;
         assert!(updated.pixels().any(|pixel| *pixel == red));
         // Both insufficient height and an unsupported terminal leave the references editable.
@@ -2334,6 +2387,30 @@ async fn composer_thumbnails_follow_draft_deletion_and_resize() -> Result<()> {
                 buffer_text(last_rendered_buffer(&tui.terminal)).contains("[Image #1][Image #2]")
             );
         }
+        app.chat_widget
+            .set_pet_image_support_for_tests(PetImageSupport::Supported(ImageProtocol::Kitty));
+        render_composer_thumbnails(&mut app, &mut tui, wide, |tiles| tiles.len() == 2).await?;
+        app.chat_widget.handle_key_event(KeyCode::Home.into());
+        app.chat_widget.handle_paste("keep my draft ".to_string());
+        app.chat_widget.handle_key_event(KeyCode::End.into());
+        app.chat_widget.handle_key_event(KeyCode::Backspace.into());
+        app.render_chat_widget_frame(&mut tui, wide)?;
+        assert_eq!(tui.retained_images.len(), 1);
+        app.chat_widget.handle_key_event(KeyCode::Backspace.into());
+        app.render_chat_widget_frame(&mut tui, wide)?;
+        assert!(app.chat_widget.composer_images.is_none());
+        assert!(tui.retained_images.is_empty());
+        let rendered = buffer_text(last_rendered_buffer(&tui.terminal));
+        assert!(rendered.contains("keep my draft"), "{rendered}");
+        assert!(!rendered.contains("[Image #"), "{rendered}");
+        // A thumbnail may also be deleted before its background decode completes.
+        app.chat_widget
+            .attach_image(banner.clone(), ClipboardPasteContext::Composer);
+        app.render_chat_widget_frame(&mut tui, wide)?;
+        app.chat_widget.handle_key_event(KeyCode::Backspace.into());
+        app.render_chat_widget_frame(&mut tui, wide)?;
+        assert!(app.chat_widget.composer_images.is_none());
+        assert!(tui.retained_images.is_empty());
         tui.set_owned_screen(/*owned*/ false)?;
     }
     Ok(())
