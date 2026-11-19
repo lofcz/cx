@@ -39,6 +39,7 @@ async fn decode_document(
     bytes: Vec<u8>,
     path: &PathUri,
     location: Option<SourceLocation>,
+    protocol: Option<ImageProtocol>,
 ) -> Result<DocumentContent> {
     if !(FileLink {
         path: path.inferred_native_path_string(),
@@ -48,12 +49,14 @@ async fn decode_document(
     {
         return AppServerSession::preview_text(bytes).map(DocumentContent::Text);
     }
-    tokio::task::spawn_blocking(move || match SidebarImage::decode(&bytes) {
-        Ok(image) => Ok(DocumentContent::Image(Box::new(image))),
-        Err(image_error) => AppServerSession::preview_text(bytes)
-            .map(DocumentContent::Text)
-            .map_err(|_| image_error),
-    })
+    tokio::task::spawn_blocking(
+        move || match SidebarImage::decode_for_terminal(&bytes, protocol) {
+            Ok(image) => Ok(DocumentContent::Image(Box::new(image))),
+            Err(image_error) => AppServerSession::preview_text(bytes)
+                .map(DocumentContent::Text)
+                .map_err(|_| image_error),
+        },
+    )
     .await?
 }
 
@@ -102,6 +105,7 @@ pub(super) struct DocumentRenderOptions<'a> {
     pub(super) keymap: &'a RuntimeKeymap,
     pub(super) resize_hint: Option<&'a str>,
     pub(super) image_protocol: Option<ImageProtocol>,
+    pub(super) dragging: bool,
 }
 
 const MAX_MODEL_DOCUMENTS: usize = 8;
@@ -127,7 +131,7 @@ struct ModelLoad {
 }
 
 pub(super) struct Document {
-    source: ThreadId,
+    pub(super) source: ThreadId,
     pub(super) path: PathUri,
     original_path: AppServerPath,
     pub(super) watch: Option<(uuid::Uuid, tokio::sync::watch::Sender<()>)>,
@@ -156,6 +160,52 @@ enum State {
 }
 
 impl Document {
+    pub(super) fn loading(
+        source: ThreadId,
+        path: PathUri,
+        backend: crate::backend_id::BackendId,
+        location: Option<SourceLocation>,
+    ) -> Self {
+        let original_path = AppServerPath::from_app_server(path.inferred_native_path_string());
+        Self::loading_with_original_path(source, path, original_path, backend, location)
+    }
+
+    fn loading_with_original_path(
+        source: ThreadId,
+        path: PathUri,
+        original_path: AppServerPath,
+        backend: crate::backend_id::BackendId,
+        location: Option<SourceLocation>,
+    ) -> Self {
+        Self {
+            source,
+            path,
+            original_path,
+            watch: None,
+            backend,
+            location,
+            link: None,
+            state: State::Loading(Instant::now()),
+            path_actions: PathActions::default(),
+            access: DocumentAccess::User,
+        }
+    }
+
+    pub(super) fn peek_image(&self) -> Option<SidebarImage> {
+        match &self.state {
+            State::Image(image) => Some(image.fork()),
+            _ => None,
+        }
+    }
+
+    pub(super) fn loading_image(&self) -> bool {
+        matches!(self.state, State::Loading(_))
+    }
+
+    pub(super) fn failed(&self) -> bool {
+        matches!(self.state, State::Failed { .. })
+    }
+
     pub(super) fn link_at(&self, column: u16, row: u16) -> Option<ReaderLink> {
         if self.path_actions.scroll.is_some() {
             return None;
@@ -393,6 +443,7 @@ impl Document {
             keymap,
             resize_hint,
             image_protocol,
+            dragging,
         } = options;
         let buf = &mut *frame.buffer;
         let [_, area] = side_pane::tab_and_body(panel);
@@ -500,15 +551,13 @@ impl Document {
                     .wrap(ratatui::widgets::Wrap { trim: true })
                     .render(body, buf);
             }
-            State::Image(image) => {
-                frame.image_placements.extend(image.paint(
-                    body,
-                    buf,
-                    image_protocol,
-                    motion,
-                    frames,
-                ))
-            }
+            State::Image(image) => frame.image_placements.extend(image.paint(
+                body,
+                buf,
+                image_protocol,
+                motion,
+                frames,
+            )),
             State::Loading(started) => {
                 let glyph = crate::motion::loading_glyph(*started, motion, frames);
                 Line::from(vec![
@@ -532,6 +581,7 @@ impl Document {
                 line_starts,
                 target,
             } => {
+                view.set_divider_preview(dragging);
                 view.set_keymap_bindings(keymap);
                 if view.tick_selection(cells) {
                     frames.schedule_frame_in(std::time::Duration::from_millis(45));
@@ -598,6 +648,7 @@ impl Document {
                 if let Some(delay) = view.render_composer_gap(gap, /*hint*/ None, buf, now) {
                     frames.schedule_frame_in(delay);
                 }
+                view.set_divider_preview(false);
                 if height > 0 {
                     let footer_area =
                         Rect::new(body.x, content.bottom() + gap_height, body.width, height);
@@ -645,6 +696,9 @@ impl App {
             && self.overlay.is_none()
             && self.conversation_frame.panel_area().is_some();
         for (owner, pane) in &mut self.sidebars {
+            if *owner != parent {
+                pane.image_hover = Default::default();
+            }
             pane.cancel_hidden_document_primary(visible && *owner == parent);
         }
     }
@@ -731,6 +785,7 @@ impl App {
         focus: bool,
     ) -> Result<()> {
         if let Some(id) = self.open_document_tab(
+            tui,
             server,
             source,
             original_path,
@@ -750,6 +805,7 @@ impl App {
 
     pub(super) fn open_document_tab(
         &mut self,
+        tui: &tui::Tui,
         server: &AppServerSession,
         source: ThreadId,
         original_path: AppServerPath,
@@ -804,92 +860,177 @@ impl App {
             );
             return None;
         }
-        let request = uuid::Uuid::new_v4();
-        let (state, access) = match origin {
-            DocumentOrigin::User { .. } => (State::Loading(Instant::now()), DocumentAccess::User),
-            DocumentOrigin::Model { permissions } => {
-                let (state, load) = match (permissions, environment) {
-                    (Ok(None), _) => (State::AwaitingOpen, None),
-                    (Err(error), _) => (
-                        State::Failed {
-                            error,
-                            position: None,
-                        },
-                        None,
+        let protocol = self.preview_image_protocol(tui);
+        let (request, mut doc) = if matches!(origin, DocumentOrigin::User { .. }) {
+            if let Some(cached) = self
+                .sidebar_mut()
+                .image_hover
+                .take(backend_id, source, &path)
+            {
+                cached
+            } else {
+                (
+                    uuid::Uuid::new_v4(),
+                    Document::loading_with_original_path(
+                        source,
+                        path.clone(),
+                        original_path.clone(),
+                        backend_id,
+                        location,
                     ),
-                    (Ok(Some(_)), None) => (
-                        State::Failed {
-                            error: eyre!("Local filesystem is unavailable"),
-                            position: None,
-                        },
-                        None,
-                    ),
-                    (Ok(Some(permissions)), Some(environment)) => {
-                        let reader = server.file_system();
-                        let task_tx = tx.clone();
-                        let task_path = path.clone();
-                        let task_original = original_path.clone();
-                        let permissions = Arc::new(permissions);
-                        let initial = Arc::clone(&permissions);
-                        let (cancel, canceled) = oneshot::channel();
-                        tokio::spawn(async move {
-                            let read = model_read::read(
-                                &reader,
-                                &environment,
-                                source,
-                                &task_original,
-                                &task_path,
-                                &permissions,
-                            );
-                            let result = tokio::select! {
-                                biased;
-                                _ = canceled => Err(eyre!("Preview closed")),
-                                result = read => result,
-                            };
-                            let result = match result {
-                                Ok(bytes) => decode_document(bytes, &task_path, location).await,
-                                Err(error) => Err(error),
-                            };
-                            task_tx.send(AppEvent::SidebarDocumentLoaded {
-                                backend_id,
-                                parent,
-                                tab: request,
-                                request,
-                                result,
-                            });
-                        });
-                        (
-                            State::Loading(Instant::now()),
-                            Some(ModelLoad {
-                                permissions: initial,
-                                _cancel: cancel,
-                            }),
-                        )
-                    }
-                };
-                (state, DocumentAccess::Model { load })
+                )
             }
+        } else {
+            let request = uuid::Uuid::new_v4();
+            let (state, access) = match origin {
+                DocumentOrigin::User { .. } => unreachable!(),
+                DocumentOrigin::Model { permissions } => {
+                    let (state, load) = match (permissions, environment) {
+                        (Ok(None), _) => (State::AwaitingOpen, None),
+                        (Err(error), _) => (
+                            State::Failed {
+                                error,
+                                position: None,
+                            },
+                            None,
+                        ),
+                        (Ok(Some(_)), None) => (
+                            State::Failed {
+                                error: eyre!("Local filesystem is unavailable"),
+                                position: None,
+                            },
+                            None,
+                        ),
+                        (Ok(Some(permissions)), Some(environment)) => {
+                            let reader = server.file_system();
+                            let task_tx = tx.clone();
+                            let task_path = path.clone();
+                            let task_original = original_path.clone();
+                            let permissions = Arc::new(permissions);
+                            let initial = Arc::clone(&permissions);
+                            let (cancel, canceled) = oneshot::channel();
+                            tokio::spawn(async move {
+                                let read = model_read::read(
+                                    &reader,
+                                    &environment,
+                                    source,
+                                    &task_original,
+                                    &task_path,
+                                    &permissions,
+                                );
+                                let result = tokio::select! {
+                                    biased;
+                                    _ = canceled => Err(eyre!("Preview closed")),
+                                    result = read => result,
+                                };
+                                let result = match result {
+                                    Ok(bytes) => {
+                                        decode_document(bytes, &task_path, location, protocol).await
+                                    }
+                                    Err(error) => Err(error),
+                                };
+                                task_tx.send(AppEvent::SidebarDocumentLoaded {
+                                    backend_id,
+                                    parent,
+                                    tab: request,
+                                    request,
+                                    result,
+                                });
+                            });
+                            (
+                                State::Loading(Instant::now()),
+                                Some(ModelLoad {
+                                    permissions: initial,
+                                    _cancel: cancel,
+                                }),
+                            )
+                        }
+                    };
+                    (state, DocumentAccess::Model { load })
+                }
+            };
+            (
+                request,
+                Document {
+                    source,
+                    path: path.clone(),
+                    original_path: original_path.clone(),
+                    watch: None,
+                    backend: backend_id,
+                    link: None,
+                    location,
+                    state,
+                    path_actions: PathActions::default(),
+                    access,
+                },
+            )
         };
-        let pane = self.sidebar_mut();
-        if matches!(access, DocumentAccess::User) && !pane.opened_files.contains(&path) {
-            pane.opened_files.push(path.clone());
+        doc.go_to(location);
+        doc.original_path = original_path;
+        if matches!(doc.access, DocumentAccess::User) {
+            doc.subscribe(request, parent, server, self.app_event_tx.clone(), protocol);
         }
-        let mut doc = Document {
-            source,
-            path,
-            original_path,
-            watch: None,
-            backend: backend_id,
-            link: None,
-            location,
-            state,
-            access,
-            path_actions: PathActions::default(),
-        };
-        doc.subscribe(request, parent, server, tx);
+        let pane = self.sidebar_mut();
+        if matches!(doc.access, DocumentAccess::User) && !pane.opened_files.contains(&path) {
+            pane.opened_files.push(path);
+        }
         pane.documents.insert(request, doc);
         pane.add_document_tab(request);
         Some(request)
+    }
+
+    pub(super) fn load_document(
+        &self,
+        server: &AppServerSession,
+        parent: ThreadId,
+        request: uuid::Uuid,
+        doc: &Document,
+        original_path: AppServerPath,
+        protocol: Option<ImageProtocol>,
+    ) -> tokio::task::JoinHandle<()> {
+        let fs = server.file_system();
+        let backend_id = server.backend_id();
+        let source = doc.source;
+        let path = doc.path.clone();
+        let location = doc.location;
+        let tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let result = async {
+                if (FileLink {
+                    path: path.inferred_native_path_string(),
+                    location,
+                })
+                .is_image()
+                {
+                    // A quick sweep across file rows must not queue a decode (or hold a
+                    // full-size compressed buffer) for every row the pointer crosses.
+                    static SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
+                    let permit = SLOTS.acquire().await?;
+                    let bytes = fs.read_preview_file(source, &original_path, &path).await?;
+                    tokio::task::spawn_blocking(move || {
+                        let _permit = permit;
+                        match SidebarImage::decode_for_terminal(&bytes, protocol) {
+                            Ok(image) => Ok(DocumentContent::Image(Box::new(image))),
+                            Err(image_error) => AppServerSession::preview_text(bytes)
+                                .map(DocumentContent::Text)
+                                .map_err(|_| image_error),
+                        }
+                    })
+                    .await?
+                } else {
+                    let bytes = fs.read_preview_file(source, &original_path, &path).await?;
+                    AppServerSession::preview_text(bytes).map(DocumentContent::Text)
+                }
+            }
+            .await;
+            tx.send(AppEvent::SidebarDocumentLoaded {
+                backend_id,
+                parent,
+                tab: request,
+                request,
+                result,
+            });
+        })
     }
 
     /// A pan that starts on the image owns motion and release even over another pane or tab.
@@ -925,6 +1066,7 @@ impl App {
         let focused = self.panel_focus() == Some(PaneFocus::Sidebar);
         let panel = self.conversation_frame.panel_area();
         let parent = self.sidebar_parent();
+        let protocol = self.preview_image_protocol(tui);
         let Some(pane) = self.sidebars.get_mut(&parent) else {
             return false;
         };
@@ -985,7 +1127,7 @@ impl App {
                     if doc.awaits_open() {
                         doc.state = State::Loading(Instant::now());
                     }
-                    doc.subscribe(id, parent, server, self.app_event_tx.clone());
+                    doc.subscribe(id, parent, server, self.app_event_tx.clone(), protocol);
                     if !pane.opened_files.contains(&doc.path) {
                         pane.opened_files.push(doc.path.clone());
                     }

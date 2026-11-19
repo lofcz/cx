@@ -320,6 +320,27 @@ fn terminal_info_with_version_for_test(
 }
 
 #[test]
+fn konsole_crop_requires_native_graphics_in_the_outer_terminal() {
+    for (version, expected) in [
+        ("260803", true),
+        ("22.04.0", true),
+        ("210800", false),
+        ("unknown", false),
+    ] {
+        let mut info = terminal_info_with_version_for_test(
+            TerminalName::Konsole,
+            None,
+            None,
+            Some(version),
+            None,
+        );
+        assert_eq!(konsole_supports_crop(&info), expected);
+        info.multiplexer = Some(Multiplexer::Tmux { version: None });
+        assert!(!konsole_supports_crop(&info));
+    }
+}
+
+#[test]
 fn parse_dotted_version_requires_simple_numeric_components() {
     assert_eq!(parse_dotted_version(Some("3.6.10")), Some((3, 6, 10)));
     assert_eq!(parse_dotted_version(Some("3.6")), Some((3, 6, 0)));

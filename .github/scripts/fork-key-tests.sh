@@ -91,6 +91,12 @@ just rust_min_stack="$MIN_STACK" test \
     (package(codex-tui) & test(resume_picker)) |
     (package(codex-tui) & test(rate_limit_recovery)) |
     (package(codex-tui) & test(side_model)) |
+    (package(codex-tui) & test(sidebar_image::)) |
+    (package(codex-tui) & test(image_decode::)) |
+    (package(codex-tui) & test(image_hover::)) |
+    (package(codex-tui) & test(divider_drag)) |
+    (package(codex-tui) & test(native_upload)) |
+    (package(codex-tui) & test(composer_thumbnails)) |
     (package(codex-tui) & test(open_agent_picker_selects_path_backed_agent)) |
     (package(codex-tui) & test(pending_input_preview::tests)) |
     (package(codex-tui) & test(pending_steer_cancel_hint_follows_effective_bindings)) |

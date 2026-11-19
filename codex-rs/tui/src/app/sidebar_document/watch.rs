@@ -6,6 +6,7 @@ use super::AppServerPath;
 use super::AppServerSession;
 use super::Document;
 use super::ThreadId;
+use crate::pets::ImageProtocol;
 use tokio::sync::watch;
 
 impl Document {
@@ -15,6 +16,7 @@ impl Document {
         parent: ThreadId,
         server: &AppServerSession,
         tx: AppEventSender,
+        protocol: Option<ImageProtocol>,
     ) {
         if !matches!(self.access, super::DocumentAccess::User) {
             return;
@@ -33,7 +35,7 @@ impl Document {
             let load = || async {
                 let result = async {
                     let bytes = fs.read_preview_file(source, &original_path, &path).await?;
-                    super::decode_document(bytes, &path, location).await
+                    super::decode_document(bytes, &path, location, protocol).await
                 }
                 .await;
                 tx.send(AppEvent::SidebarDocumentLoaded {

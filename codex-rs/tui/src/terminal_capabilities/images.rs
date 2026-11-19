@@ -164,11 +164,12 @@ fn is_iterm2_terminal(info: &TerminalInfo) -> bool {
 }
 
 impl ImageProtocol {
-    pub(crate) fn for_sidebar(self) -> Self {
+    pub(crate) fn for_interactive_image(self) -> Self {
         if self != Self::Sixel {
             return self;
         }
-        if konsole_supports_crop(&terminal_info()) {
+        static KONSOLE_CROP: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        if *KONSOLE_CROP.get_or_init(|| konsole_supports_crop(&terminal_info())) {
             Self::Kitty
         } else {
             self

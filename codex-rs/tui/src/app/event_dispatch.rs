@@ -4070,16 +4070,28 @@ impl App {
                     self.model_preview_load = None;
                     tui.frame_requester().schedule_frame();
                 }
-                if let Some(doc) = self.sidebars.get_mut(&Some(parent)).and_then(|pane| pane.documents.get_mut(&tab))
+                let Some(pane) = self.sidebars.get_mut(&Some(parent)) else {
+                    return Ok(AppRunControl::Continue);
+                };
+                if let Some(doc) = pane.documents.get_mut(&tab) {
+                    if doc.backend == backend_id
+                        && (request == tab
+                            || doc.watch.as_ref().is_some_and(|(id, _)| *id == request))
+                    {
+                        if model_load && doc.model_loading() && app_server.backend_id() == backend_id {
+                            doc.finish_model_load(app_server, result).await;
+                            tui.frame_requester().schedule_frame();
+                        } else {
+                            doc.loaded(result);
+                            tui.frame_requester().schedule_frame();
+                        }
+                    }
+                } else if request == tab
+                    && let Some(doc) = pane.image_hover.document_mut(tab)
                     && doc.backend == backend_id
                 {
-                    if model_load && doc.model_loading() && app_server.backend_id() == backend_id {
-                        doc.finish_model_load(app_server, result).await;
-                        tui.frame_requester().schedule_frame();
-                    } else if doc.watch.as_ref().is_some_and(|(id, _)| *id == request) {
-                        doc.loaded(result);
-                        tui.frame_requester().schedule_frame();
-                    }
+                    doc.loaded(result);
+                    tui.frame_requester().schedule_frame();
                 }
             }
             AppEvent::SidebarFilesLoaded { backend_id, parent, request, page } => {

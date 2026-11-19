@@ -44,6 +44,7 @@ impl App {
         tui.frame_requester().schedule_frame();
         let permissions = server.model_preview_permissions(source).await;
         let id = self.open_document_tab(
+            tui,
             server,
             source,
             document.original_path,
