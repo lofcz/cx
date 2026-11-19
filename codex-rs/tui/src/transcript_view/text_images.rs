@@ -92,23 +92,11 @@ pub(in crate::transcript_view) fn visible_requests(
 pub(in crate::transcript_view) fn regions(
     layout: &TextLayout,
 ) -> impl Iterator<Item = (usize, u16, &Arc<TranscriptImage>)> {
-    let trailing = layout.visible_image().map(|image| {
-        let indent = if layout.image_left_aligned {
-            2
-        } else {
-            (layout.width - image.columns) / 2
-        };
-        (layout.rows.len(), indent, image)
-    });
-    layout
-        .inline_images
-        .iter()
-        .filter_map(|inline| {
-            let (distance, indent) = inline.region?;
-            let row = layout.rows.len().checked_sub(distance)?;
-            Some((row, indent, inline.image.as_ref()?))
-        })
-        .chain(trailing)
+    layout.inline_images.iter().filter_map(|inline| {
+        let (distance, indent) = inline.region?;
+        let row = layout.rows.len().checked_sub(distance)?;
+        Some((row, indent, inline.image.as_ref()?))
+    })
 }
 
 /// Dragging past a preview's first row includes its label, even for a one-row image.

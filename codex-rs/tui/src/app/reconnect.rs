@@ -465,6 +465,7 @@ impl App {
         for (parent, pane) in &mut self.sidebars {
             pane.focus_document_request = None;
             pane.agents.pending_link = None;
+            pane.image_hover = Default::default();
             if let Some(tab) = pane.diff_tab() {
                 pane.remove_document(tab);
             }
@@ -472,7 +473,13 @@ impl App {
                 if let Some(parent) = parent
                     && doc.backend == session.backend_id()
                 {
-                    doc.subscribe(*tab, *parent, &session, self.app_event_tx.clone());
+                    doc.subscribe(
+                        *tab,
+                        *parent,
+                        &session,
+                        self.app_event_tx.clone(),
+                        /*protocol*/ None,
+                    );
                 } else {
                     doc.connection_replaced();
                 }

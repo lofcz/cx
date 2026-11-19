@@ -6,6 +6,7 @@
 use crate::history_cell::ActivityDisclosure;
 use crate::key_hint::ShortcutHint;
 use crate::keymap::KeymapContext;
+use crate::transcript_image::HistoryImage;
 use std::sync::Weak;
 
 use super::*;
@@ -65,6 +66,7 @@ fn cell_content_layout(
     mode: HistoryRenderMode,
     presentation: CellPresentation,
     shortcut: Option<ShortcutHint>,
+    previous_image: Option<&HistoryImage>,
 ) -> TextLayout {
     let mut layout = if presentation.disclosure {
         activity_layout(
@@ -103,9 +105,7 @@ fn cell_content_layout(
         } else {
             PreviewKind::Inspected
         };
-        layout.image =
-            crate::transcript_image::TranscriptImage::load(path.as_path(), width, protocol, kind)
-                .map(Arc::new);
+        layout.image = HistoryImage::fit(path.as_path(), width, protocol, kind, previous_image);
         layout.image_left_aligned = kind == PreviewKind::Generated;
     }
     layout
@@ -120,6 +120,7 @@ pub(super) struct LayoutCache {
     pub(super) images: markdown_images::MarkdownImages,
     entries: Vec<CachedLayout>,
     document_resize_preview: bool,
+    pub(super) reuse_text_width: bool,
     frame: u64,
     render_state: Option<RenderState>,
 }
@@ -132,6 +133,7 @@ struct RenderState {
     background: Option<(u8, u8, u8)>,
     color_level: crate::terminal_palette::StdoutColorLevel,
     cell_size: Option<(u32, u32)>,
+    virtual_placement: bool,
 }
 
 struct CachedLayout {
@@ -157,6 +159,11 @@ pub(super) struct CellPresentation {
 }
 
 impl TranscriptView {
+    /// During a divider drag, clip painted text and keep image placements sized to the pane.
+    pub(crate) fn set_divider_preview(&mut self, dragging: bool) {
+        self.cache.reuse_text_width = dragging && !self.has_active_interaction();
+    }
+
     fn content_presentation(
         &mut self,
         cell: &dyn HistoryCell,
@@ -276,7 +283,7 @@ impl TranscriptView {
                     if presentation.expanded {
                         self.disclosure.expanded.extend(ids.iter().cloned());
                     }
-                    return Some(self.cache.get(cell, width, presentation, || {
+                    return Some(self.cache.get(cell, width, presentation, |_| {
                         row.layout(width, presentation.expanded, Vec::new())
                     }));
                 }
@@ -305,24 +312,29 @@ impl TranscriptView {
                     }
                     let previous_presentation =
                         self.content_presentation(previous.as_ref(), self.detailed, mode);
-                    self.cache
-                        .has_visible_content(previous, width, previous_presentation, || {
+                    self.cache.has_visible_content(
+                        previous,
+                        width,
+                        previous_presentation,
+                        |image| {
                             cell_content_layout(
                                 previous,
                                 width,
                                 mode,
                                 previous_presentation,
                                 shortcut,
+                                image,
                             )
-                        })
+                        },
+                    )
                 })
                 .is_some_and(|previous| is_rich_user_prompt(cells[previous].as_ref(), mode));
         presentation.separated =
             index > 0 && !cell.is_stream_continuation() && !shares_prompt_background;
         presentation.shares_prompt_background = shares_prompt_background;
         presentation.turn_tip_space = self.turn_tip_key == Some(EntryKey::cell(cell));
-        Some(self.cache.get(cell, width, presentation, || {
-            let mut layout = cell_content_layout(cell, width, mode, presentation, shortcut);
+        Some(self.cache.get(cell, width, presentation, |image| {
+            let mut layout = cell_content_layout(cell, width, mode, presentation, shortcut, image);
             if shares_prompt_background {
                 layout = layout.without_leading_blank_row();
             }
@@ -365,6 +377,7 @@ impl LayoutCache {
             background: crate::terminal_palette::default_bg(),
             color_level: crate::terminal_palette::stdout_color_level(),
             cell_size: crate::transcript_image::terminal_cell_size(),
+            virtual_placement: crate::tui::fullscreen_virtual_image_base().is_some(),
         };
         if self.render_state.as_ref() != Some(&state) {
             self.entries.clear();
@@ -380,12 +393,14 @@ impl LayoutCache {
         cell: &Arc<dyn HistoryCell>,
         width: u16,
         presentation: CellPresentation,
-        render: impl FnOnce() -> TextLayout,
+        render: impl FnOnce(Option<&HistoryImage>) -> TextLayout,
     ) -> Arc<TextLayout> {
         let source = Arc::downgrade(cell);
         let animation_tick = cell.transcript_animation_tick();
         if let Some(index) = self.entries.iter().position(|entry| {
-            (entry.width == width || self.document_resize_preview)
+            (entry.width == width
+                || self.document_resize_preview
+                || (self.reuse_text_width && entry.layout.image.is_none()))
                 && entry.presentation == presentation
                 && entry.source.ptr_eq(&source)
                 && (entry.rendered_frame == self.frame
@@ -393,7 +408,7 @@ impl LayoutCache {
                         && entry.animation_tick == animation_tick))
         }) {
             let entry = &mut self.entries[index];
-            if entry.width != width {
+            if entry.width != width && self.document_resize_preview {
                 // Keep the document's styled source and links while the divider moves.
                 entry.layout = Arc::new(entry.layout.rewrap(width));
                 entry.width = width;
@@ -405,7 +420,16 @@ impl LayoutCache {
             }
             return layout;
         }
-        let mut layout = render();
+        let previous = self
+            .entries
+            .iter()
+            .position(|entry| entry.source.ptr_eq(&source))
+            .map(|index| self.entries.remove(index));
+        let previous_image = previous
+            .as_ref()
+            .filter(|entry| entry.presentation.image_protocol == presentation.image_protocol)
+            .and_then(|entry| entry.layout.image.as_ref());
+        let mut layout = render(previous_image);
         if let Some(protocol) = presentation.image_protocol
             && cell.as_any().is::<crate::history_cell::AgentMarkdownCell>()
         {
@@ -422,7 +446,6 @@ impl LayoutCache {
         } else {
             layout
         });
-        self.entries.retain(|entry| !entry.source.ptr_eq(&source));
         self.entries.push(CachedLayout {
             source,
             width,
@@ -440,12 +463,14 @@ impl LayoutCache {
         cell: &Arc<dyn HistoryCell>,
         width: u16,
         presentation: CellPresentation,
-        render: impl FnOnce() -> TextLayout,
+        render: impl FnOnce(Option<&HistoryImage>) -> TextLayout,
     ) -> bool {
         let source = Arc::downgrade(cell);
         let animation_tick = cell.transcript_animation_tick();
         if let Some(index) = self.entries.iter().position(|entry| {
-            entry.width == width
+            (entry.width == width
+                || self.document_resize_preview
+                || (self.reuse_text_width && entry.layout.image.is_none()))
                 && entry.presentation.expanded == presentation.expanded
                 && entry.presentation.disclosure == presentation.disclosure
                 && entry.presentation.detailed == presentation.detailed
@@ -482,7 +507,7 @@ impl LayoutCache {
                     .layout
                     .image
                     .as_ref()
-                    .map_or(0, |image| image.pixels.len())
+                    .map_or(0, HistoryImage::retained_bytes)
         };
         let mut bytes = self.entries.iter().map(retained_bytes).sum::<usize>();
         // Retain a single oversized entry rather than repeatedly laying it out while visible.

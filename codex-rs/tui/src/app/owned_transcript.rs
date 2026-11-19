@@ -138,7 +138,6 @@ impl PreparedConversation {
             }
             selection.render(frame.buffer);
         }
-        chat_widget.note_rendered_width(self.area.width);
         if let Some(position) = bottom.cursor_pos(bottom_area)
             && self.area.contains(position.into())
         {
@@ -478,6 +477,8 @@ impl App {
                     }
                 }
             }
+            let dragging = self.divider_drag.is_some();
+            self.transcript_view.set_divider_preview(dragging);
             painted = self.paint_conversation(frame, &prepared);
             if let Some(local_workspace) =
                 displayed.and_then(|source| self.check_local_image_workspace(source))
@@ -488,6 +489,7 @@ impl App {
                     /*streaming*/ None,
                 );
             }
+            self.transcript_view.set_divider_preview(false);
             let label_style = parent
                 .and_then(|id| self.backend_registry.owner(id))
                 .or(self.app_server_backend_id)
@@ -507,6 +509,7 @@ impl App {
                         companion.view.bidi_layout = self.transcript_view.bidi_layout;
                         companion.view.agent_links = self.transcript_view.agent_links;
                         companion.view.image_protocol = self.transcript_view.image_protocol;
+                        companion.view.set_divider_preview(dragging);
                         panes.paint_companion(
                             companion,
                             frame,
@@ -525,6 +528,7 @@ impl App {
                                 streaming,
                             );
                         }
+                        companion.view.set_divider_preview(false);
                     }
                 }
                 Some(sidebar::SidebarLayout::Panel { sidebar, focus, .. }) => {
@@ -554,6 +558,7 @@ impl App {
                                     .divider_drag
                                     .is_some_and(super::side_pane::DividerDrag::is_live_preview),
                                 image_protocol: sidebar_image_protocol,
+                                dragging,
                             },
                         ) && hint_focus.is_active()
                         {
@@ -807,7 +812,21 @@ impl App {
                 }
             }
             if let Some(tooltip) = &tooltip {
-                tooltip.paint(frame);
+                let panel = self.conversation_frame.panel_area();
+                let peek = self.sidebars.get_mut(&sidebar_parent).is_some_and(|pane| {
+                    pane.close.is_none()
+                        && pane.paint_image_hover(
+                            frame,
+                            tooltip,
+                            panel,
+                            sidebar_image_protocol,
+                            sidebar_motion,
+                            &frames,
+                        )
+                });
+                if !peek {
+                    tooltip.paint(frame);
+                }
             }
             self.paint_centered_dialog(frame);
             if virtual_pet
@@ -841,11 +860,18 @@ impl App {
         self.conversation_frame.chat_strip = None;
         self.conversation_frame.restore_header = None;
         let area = self.conversation_area(viewport);
-        if let Some((previous, reflowed)) = self.chat_widget.resize_owned_conversation(area.width) {
-            self.transcript_view
-                .rebind_observed_live_revision(previous, reflowed);
+        // Keep the last painted stream tail and warning count during capture. Both
+        // are reconciled with the current history at the released width.
+        if self.divider_drag.is_none() || self.transcript_view.has_active_interaction() {
+            if let Some((previous, reflowed)) =
+                self.chat_widget.resize_owned_conversation(area.width)
+            {
+                self.transcript_view
+                    .rebind_observed_live_revision(previous, reflowed);
+            }
+            self.chat_widget.sync_warnings(&self.transcript_cells);
+            self.sync_owned_transcript(area.width);
         }
-        self.chat_widget.sync_warnings(&self.transcript_cells);
         let motion = MotionMode::from_animations_enabled(
             self.local_settings.tui.animations && self.local_settings.tui.effects.shimmer,
         );
@@ -855,7 +881,6 @@ impl App {
         } else {
             "esc latest"
         };
-        self.sync_owned_transcript(area.width);
         let transcript_width = self
             .chat_widget
             .history_wrap_width(area.width)

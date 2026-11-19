@@ -535,6 +535,27 @@ impl TranscriptView {
                     terminal_id: None,
                 });
             }
+            let Some(image) = visible.layout.visible_image() else {
+                continue;
+            };
+            let image_start = visible.layout.text_row_count();
+            let skip = image_start.saturating_sub(visible.row);
+            if skip >= rows.len() {
+                continue;
+            }
+            let image_indent = if visible.layout.image_left_aligned {
+                // Match the two-column prefix the assistant's Markdown uses.
+                2
+            } else {
+                self.area.width.saturating_sub(image.columns) / 2
+            };
+            let area = Rect::new(
+                self.area.x + image_indent,
+                entry_y + skip as u16,
+                image.columns,
+                (rows.len() - skip) as u16,
+            );
+            placements.push(image.placement(area, visible.row.saturating_sub(image_start)));
         }
         placements
     }
@@ -551,6 +572,11 @@ impl TranscriptView {
     ) {
         let width = area.width;
         let unseen_activity = self.unseen_activity;
+        if self.cache.reuse_text_width {
+            self.render(area, buffer, cells);
+            self.unseen_activity = unseen_activity;
+            return;
+        }
         let (summary, expanded) = self.sync_live_tool_summary(cells, collapse_turn_details, active);
         let disclose = !self.disclosure.live_ids.is_empty() && self.mode == HistoryRenderMode::Rich;
         let mode = self.mode;

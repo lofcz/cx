@@ -1,11 +1,15 @@
-//! The draft thumbnail strip keeps only visible rasters between draws and places them
-//! in textarea reference order. Attachment numbering and submission order are independent.
+//! The draft thumbnail strip prepares visible tiles off-thread and places them in textarea
+//! reference order. The cache can retain one full strip across divider drags.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
+use std::time::Instant;
+use std::time::SystemTime;
 
 use image::Rgba;
 use image::RgbaImage;
@@ -14,6 +18,7 @@ use ratatui::layout::Rect;
 use ratatui::widgets::Paragraph;
 use ratatui::widgets::Widget;
 use ratatui::widgets::Wrap;
+use tokio::sync::oneshot;
 
 use super::ImagePlacement;
 use super::TranscriptImage;
@@ -21,42 +26,73 @@ use super::terminal_cell_size;
 use crate::bottom_pane::LocalImageAttachment;
 use crate::bottom_pane::TextArea;
 use crate::pets::ImageProtocol;
+use crate::tui::FrameRequester;
 
 // Six columns by three rows is square with typical 8 × 16 pixel cells.
 const WIDTH: u16 = 6;
 const HEIGHT: u16 = 3;
+const FILE_RECHECK_INTERVAL: Duration = Duration::from_millis(500);
 
-#[derive(Hash, PartialEq, Eq)]
-struct TileKey {
-    path: PathBuf,
-    version: Option<(u64, std::time::SystemTime)>,
+#[derive(Clone)]
+struct CachedTile {
+    version: Option<(u64, Option<SystemTime>)>,
+    checked: Instant,
+    image: Option<Arc<TranscriptImage>>,
 }
 
-pub(crate) struct ComposerImages {
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct TileStyle {
     protocol: ImageProtocol,
     cell_size: (u32, u32),
     background: (u8, u8, u8),
-    cache: RefCell<HashMap<TileKey, Option<Arc<TranscriptImage>>>>,
+}
+
+#[derive(Default)]
+struct TileCache {
+    ready: HashMap<PathBuf, CachedTile>,
+    pending: Option<oneshot::Receiver<(PathBuf, CachedTile)>>,
+    widest_strip: usize,
+    last_check: Option<Instant>,
+}
+
+pub(crate) struct ComposerImages {
+    style: TileStyle,
+    frames: FrameRequester,
+    cache: RefCell<TileCache>,
     pub(crate) placements: RefCell<Vec<ImagePlacement>>,
 }
 
 impl ComposerImages {
-    pub(crate) fn for_terminal(protocol: ImageProtocol, previous: Option<Self>) -> Option<Self> {
+    pub(crate) fn for_terminal(
+        protocol: ImageProtocol,
+        frames: &FrameRequester,
+        mut previous: Option<Self>,
+    ) -> Option<Self> {
+        // Direct Konsole supports keyed Kitty placements. Its Sixel graphics can survive
+        // overwriting the text underneath a removed thumbnail.
+        let protocol = protocol.for_interactive_image();
         // Kitty can scale a nominal raster into its cell placement. Sixel needs physical pixels.
         let cell_size = terminal_cell_size()
             .or_else(|| (protocol != ImageProtocol::Sixel).then_some((8, 16)))?;
         let background = crate::terminal_palette::default_bg()
             .map(crate::style::user_message_bg_rgb)
             .unwrap_or((48, 48, 48));
-        if previous.as_ref().is_some_and(|old| {
-            (old.protocol, old.cell_size, old.background) == (protocol, cell_size, background)
-        }) {
-            return previous;
-        }
-        Some(Self {
+        let style = TileStyle {
             protocol,
             cell_size,
             background,
+        };
+        if let Some(old) = previous.as_mut()
+            && old.style == style
+        {
+            // A backdrop can render without presenting its registrations. Each frame
+            // must register only the thumbnails actually painted by its composer.
+            old.placements.get_mut().clear();
+            return previous;
+        }
+        Some(Self {
+            style,
+            frames: frames.clone(),
             cache: RefCell::default(),
             placements: RefCell::default(),
         })
@@ -83,7 +119,24 @@ impl ComposerImages {
     ) {
         let (visible, hidden) = visible_thumbnails(area.width, attachments.len());
         let mut cache = self.cache.borrow_mut();
-        let mut previous = std::mem::take(&mut *cache);
+        if let Some(pending) = &mut cache.pending {
+            match pending.try_recv() {
+                Ok((path, tile)) => {
+                    cache.last_check = Some(Instant::now());
+                    cache.ready.insert(path, tile);
+                    cache.pending = None;
+                }
+                Err(oneshot::error::TryRecvError::Closed) => cache.pending = None,
+                Err(oneshot::error::TryRecvError::Empty) => {}
+            }
+        }
+        let attached_paths: HashSet<_> = attachments
+            .iter()
+            .map(|image| image.path.as_path())
+            .collect();
+        cache
+            .ready
+            .retain(|path, _| attached_paths.contains(path.as_path()));
         let mut placements = self.placements.borrow_mut();
         placements.clear();
         let style = crate::style::secondary_text_style();
@@ -104,24 +157,26 @@ impl ComposerImages {
                     .unwrap_or(usize::MAX)
             });
         }
-        for attachment in ordered.into_iter().take(visible) {
-            let path = &attachment.path;
-            let key = TileKey {
-                path: path.clone(),
-                version: path
-                    .metadata()
-                    .ok()
-                    .and_then(|m| Some((m.len(), m.modified().ok()?))),
-            };
-            let image = cache.entry(key).or_insert_with_key(|key| {
-                previous
-                    .remove(key)
-                    .unwrap_or_else(|| self.load_tile(path).map(Arc::new))
+        cache.widest_strip = cache.widest_strip.max(visible);
+        let shown = &ordered[..visible];
+        let mut excess = cache.ready.len().saturating_sub(cache.widest_strip);
+        if excess > 0 {
+            let shown: HashSet<_> = shown.iter().map(|image| image.path.as_path()).collect();
+            cache.ready.retain(|path, _| {
+                if excess == 0 || shown.contains(path.as_path()) {
+                    return true;
+                }
+                excess -= 1;
+                false
             });
+        }
+        cache.prepare(shown, self.style, &self.frames);
+        for attachment in shown {
+            let path = &attachment.path;
             let tile = Rect::new(x, area.y, WIDTH, HEIGHT);
-            if let Some(image) = image {
+            if let Some(image) = cache.ready.get(path).and_then(|tile| tile.image.as_ref()) {
                 placements.push(ImagePlacement {
-                    image: image.clone(),
+                    image: Arc::clone(image),
                     area: tile,
                     first_row: 0,
                     crop: None,
@@ -140,8 +195,57 @@ impl ComposerImages {
             buf.set_string(x, area.y, format!("+{hidden}"), style);
         }
     }
+}
 
-    fn load_tile(&self, path: &Path) -> Option<TranscriptImage> {
+impl TileCache {
+    fn prepare(
+        &mut self,
+        shown: &[&LocalImageAttachment],
+        style: TileStyle,
+        frames: &FrameRequester,
+    ) {
+        if self.pending.is_some() {
+            return;
+        }
+        let paths = shown.iter().map(|attachment| &attachment.path);
+        let mut next = paths.clone().find(|path| !self.ready.contains_key(*path));
+        if next.is_none()
+            && self
+                .last_check
+                .is_some_and(|last| last.elapsed() >= FILE_RECHECK_INTERVAL)
+        {
+            // On a subsequent UI frame, revalidate at most one cached file. Prioritize
+            // the oldest check so repeated drags cannot hammer a shared filesystem.
+            next = paths.min_by_key(|path| self.ready[*path].checked);
+        }
+        let Some(path) = next.cloned() else { return };
+        let previous = self.ready.get(&path).cloned();
+        let frames = frames.clone();
+        let (tx, rx) = oneshot::channel();
+        self.pending = Some(rx);
+        tokio::task::spawn_blocking(move || {
+            if tx.is_closed() {
+                return;
+            }
+            let version = path.metadata().ok().map(|m| (m.len(), m.modified().ok()));
+            let image = match previous {
+                Some(tile) if tile.version == version => tile.image,
+                _ => version.and_then(|_| style.load_tile(&path).map(Arc::new)),
+            };
+            let tile = CachedTile {
+                version,
+                image,
+                checked: Instant::now(),
+            };
+            if tx.send((path, tile)).is_ok() {
+                frames.schedule_frame();
+            }
+        });
+    }
+}
+
+impl TileStyle {
+    fn load_tile(self, path: &Path) -> Option<TranscriptImage> {
         let (cell_width, cell_height) = self.cell_size;
         let width = u32::from(WIDTH) * cell_width;
         let height = u32::from(HEIGHT) * cell_height;
@@ -178,7 +282,7 @@ impl ComposerImages {
             i64::from((width - pixels.width()) / 2),
             i64::from((height - pixels.height()) / 2),
         );
-        Some(TranscriptImage {
+        let mut image = TranscriptImage {
             protocol: self.protocol,
             columns: WIDTH,
             rows: HEIGHT,
@@ -186,7 +290,13 @@ impl ComposerImages {
             encoded: None,
             cell_width,
             cell_height,
-        })
+        };
+        image.encoded = Some(
+            image
+                .encode_rows(Rect::new(0, 0, WIDTH, HEIGHT), 0)
+                .ok()??,
+        );
+        Some(image)
     }
 }
 

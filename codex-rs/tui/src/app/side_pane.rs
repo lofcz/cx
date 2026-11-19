@@ -58,12 +58,11 @@ pub(super) struct DividerDrag {
     press: u16,
     initial_width: u16,
     width: u16,
-    guide_only: bool,
 }
 
 impl DividerDrag {
     pub(super) fn is_live_preview(self) -> bool {
-        !self.guide_only && self.width != self.initial_width
+        self.width != self.initial_width
     }
 
     pub(super) fn is_center(self) -> bool {
@@ -71,7 +70,7 @@ impl DividerDrag {
     }
 
     pub(super) fn center_preview(self, viewport: Rect) -> Option<u16> {
-        (self.is_center() && !self.guide_only && self.screen == viewport).then_some(self.width)
+        (self.is_center() && self.screen == viewport).then_some(self.width)
     }
 
     fn matches_sidebar(self, area: Rect, app: &App) -> bool {
@@ -214,11 +213,7 @@ pub(super) fn sidebar_areas(app: &App, tui: &Tui, area: Rect, fraction: f64) -> 
     let target = app.sidebar_resize_target();
     let preview = app
         .divider_drag
-        .filter(|drag| {
-            !drag.guide_only
-                && drag.matches_sidebar(area, app)
-                && app.conversation_focus_available(tui)
-        })
+        .filter(|drag| drag.matches_sidebar(area, app) && app.conversation_focus_available(tui))
         .map(|drag| drag.width);
     let saved = app.local_settings.tui.sidebar_width_percent;
     let keyboard_width = app
@@ -239,9 +234,16 @@ pub(super) fn sidebar_areas(app: &App, tui: &Tui, area: Rect, fraction: f64) -> 
     let open = target.is_some();
     let child_width = ((f64::from(child_width) * fraction).round() as u16).max(u16::from(open));
     (child_width > 0).then(|| {
-        Layout::horizontal([Constraint::Fill(1), Constraint::Length(child_width)])
-            .spacing(GAP)
-            .areas(area)
+        let main = Rect {
+            width: area.width.saturating_sub(child_width + GAP),
+            ..area
+        };
+        let child = Rect {
+            x: area.right() - child_width,
+            width: child_width,
+            ..area
+        };
+        [main, child]
     })
 }
 
@@ -413,6 +415,17 @@ impl App {
         true
     }
 
+    /// The last painted sidebar width lets a drag burst request a single redraw.
+    fn painted_divider_width(&self, drag: DividerDrag) -> Option<u16> {
+        match drag.target {
+            ResizeTarget::CommandCenter => None,
+            ResizeTarget::Sidebar { .. } => self
+                .conversation_frame
+                .divider_area()
+                .map(|divider| drag.screen.right() - divider.right()),
+        }
+    }
+
     async fn finish_divider_drag(&mut self, drag: DividerDrag) {
         if drag.width == drag.initial_width {
             return;
@@ -450,8 +463,16 @@ impl App {
                 TuiEvent::Mouse(mouse) if mouse.kind == Drag(Left) => {
                     let width = drag.width_at(mouse.column);
                     if drag.width != width {
+                        let previous_width = drag.width;
                         drag.width = width;
                         self.divider_drag = Some(drag);
+                        // A motion already requested the draw that has yet to be painted.
+                        if self
+                            .painted_divider_width(drag)
+                            .is_some_and(|painted| painted != previous_width)
+                        {
+                            return Ok(true);
+                        }
                         tui.frame_requester().schedule_frame();
                     }
                     return Ok(true);
@@ -476,8 +497,13 @@ impl App {
                 | TuiEvent::Draw
                 | TuiEvent::Mouse(_) => false,
             };
+            // CX cancels a sidebar preview when focus loss interrupts the drag, so the
+            // saved width is restored. The Command Center keeps the last preview width.
+            let discard = !drag.is_center() && matches!(event, TuiEvent::FocusLost);
             self.divider_drag = None;
-            self.finish_divider_drag(drag).await;
+            if !discard {
+                self.finish_divider_drag(drag).await;
+            }
             self.refresh_link_hover(tui)?;
             tui.frame_requester().schedule_frame();
             if released {
@@ -520,8 +546,6 @@ impl App {
             press: mouse.column,
             initial_width: width,
             width,
-            // Reflow can move terminal-owned image pixels across a divider.
-            guide_only: !tui.retained_images.is_empty(),
         });
         self.cancel_pending_key_chord();
         self.refresh_link_hover(tui)?;
@@ -640,28 +664,12 @@ pub(super) fn paint_divider(
     drag: Option<DividerDrag>,
     highlight_divider: bool,
 ) {
-    // Draw after both panes registered their images. Clearing a guide to the left
-    // of retained pixels can erase the rest of that terminal row.
-    let guide = drag
-        .filter(|drag| drag.guide_only)
-        .map_or(divider, |drag| match drag.target {
-            ResizeTarget::CommandCenter => drag.screen.x + drag.width,
-            ResizeTarget::Sidebar { .. } => drag.screen.right() - drag.width - GAP,
-        });
     let style = if highlight_divider || drag.is_some() {
         crate::style::accent_style()
     } else {
         ratatui::style::Style::default().dim()
     };
     for y in frame.area().y..frame.area().bottom() {
-        let x = if guide != divider
-            && frame.image_placements.iter().any(|image| {
-                (image.area.y..image.area.bottom()).contains(&y) && guide < image.area.right()
-            }) {
-            divider
-        } else {
-            guide
-        };
-        frame.buffer[(x, y)].set_symbol("│").set_style(style);
+        frame.buffer[(divider, y)].set_symbol("│").set_style(style);
     }
 }
