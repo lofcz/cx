@@ -242,7 +242,10 @@ impl ChatWidget {
         );
         self.bottom_pane.show_selection_view(SelectionViewParams {
             view_id: Some(RATE_LIMIT_RESET_CONFIRMATION_VIEW_ID),
-            title: Some("Use this reset?".to_string()),
+            title: Some(self.account_label().map_or_else(
+                || "Use this reset?".to_string(),
+                |name| format!("Use this reset for {name}?"),
+            )),
             subtitle: Some(subtitle),
             footer_hint: Some(usage_hint_line(&self.bottom_pane.list_keymap(), "confirm")),
             items: vec![
