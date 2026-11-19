@@ -252,11 +252,14 @@ impl Document {
         ratatui::widgets::Clear.render(area, buf);
         let body = area.inner(ratatui::layout::Margin::new(1, 0));
         match &mut self.state {
-            State::Image(image) => {
-                frame
-                    .image_placements
-                    .extend(image.paint(body, buf, image_protocol, resize_hint))
-            }
+            State::Image(image) => frame.image_placements.extend(image.paint(
+                body,
+                buf,
+                image_protocol,
+                resize_hint,
+                motion,
+                frames,
+            )),
             State::Loading(started) => {
                 let glyph = crate::motion::loading_glyph(*started, motion, frames);
                 Line::from(vec![
@@ -586,6 +589,30 @@ impl App {
         Ok(())
     }
 
+    /// A pan that starts on the image owns motion and release even over another pane or tab.
+    pub(super) fn continue_image_drag(&mut self, mouse: crossterm::event::MouseEvent) -> bool {
+        if !matches!(
+            mouse.kind,
+            MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Up(MouseButton::Left)
+        ) {
+            return false;
+        }
+        let Some(pane) = self.sidebars.get_mut(&self.sidebar_parent()) else {
+            return false;
+        };
+        let Some(SidebarContent::Document(id)) = pane.visible_content() else {
+            return false;
+        };
+        let Some(Document {
+            state: State::Image(image),
+            ..
+        }) = pane.documents.get_mut(&id)
+        else {
+            return false;
+        };
+        image.mouse(mouse)
+    }
+
     pub(super) async fn handle_document_input(
         &mut self,
         tui: &mut tui::Tui,
@@ -628,7 +655,10 @@ impl App {
                 if key.kind != KeyEventKind::Press && (escape || key.code == KeyCode::Enter) {
                     return true;
                 }
-                if let State::Ready {
+                if let State::Image(image) = &mut doc.state {
+                    image.key(*key);
+                    None
+                } else if let State::Ready {
                     view,
                     cells,
                     target,
@@ -719,6 +749,13 @@ impl App {
                     return false;
                 }
                 if let Some(Document {
+                    state: State::Image(image),
+                    ..
+                }) = pane.documents.get_mut(&id)
+                {
+                    image.mouse(*mouse);
+                    None
+                } else if let Some(Document {
                     state: State::Ready { view, cells, .. },
                     link,
                     ..
