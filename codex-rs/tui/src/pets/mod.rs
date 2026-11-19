@@ -52,6 +52,7 @@ pub(crate) use image_protocol::PetImageUnsupportedReason;
 pub(crate) use image_protocol::ProtocolSelection;
 pub(crate) use image_protocol::kitty_delete_image;
 pub(crate) use image_protocol::kitty_display_png;
+pub(crate) use image_protocol::kitty_hide_image;
 pub(crate) use image_protocol::kitty_place_image;
 pub(crate) use image_protocol::kitty_png_command;
 pub(crate) use image_protocol::kitty_transmit_png_file_with_id;

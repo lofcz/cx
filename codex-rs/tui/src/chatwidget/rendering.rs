@@ -228,6 +228,7 @@ impl ChatWidget {
             .and_then(|protocol| {
                 crate::transcript_image::composer::ComposerImages::for_terminal(
                     protocol,
+                    &self.frame_requester,
                     self.composer_images.take(),
                 )
             });
