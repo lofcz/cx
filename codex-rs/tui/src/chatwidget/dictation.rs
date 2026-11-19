@@ -151,7 +151,7 @@ impl ChatWidget {
     pub(crate) fn handle_dictation_event(&mut self, event: &TuiEvent, available: bool) -> bool {
         if self.dictation.is_none() {
             if available
-                && !self.external_writer_view
+                && !self.is_read_only_view()
                 && !self.fork_in_progress
                 && self.provider_error.is_none()
                 && self.bottom_pane.composer_input_enabled()
