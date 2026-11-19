@@ -41,7 +41,7 @@ fn sixel_output_fits_wide_images_within_the_original_encoding_budget() {
     source.save(&path).unwrap();
     let image = load(30);
     assert_eq!((image.columns, image.rows), (30, 2));
-    assert_eq!(image.pixels, source);
+    assert_eq!(image.pixels.as_ref(), &source);
     assert_eq!(load(20).pixels.dimensions(), (200, 25));
 
     for (width, height) in [(600, 74), (900, 42), (720, 320)] {

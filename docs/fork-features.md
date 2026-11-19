@@ -8,7 +8,10 @@ Both projects use the Apache-2.0 license. Their existing license and notices rem
   Empty drafts do not interrupt work. Terminals that intercept the shortcut must pass it through to CX.
 - Hover over a transcript or sidebar link to see its destination. **Right-click** copies the full path or URL.
   Click a file link to preview it in the sidebar. **Ctrl+click** opens a local file in its desktop default application.
-  Konsole uses Sixel graphics for sidebar image previews.
+- Sidebar images open fitted to the pane. Scroll the wheel or swipe vertically with two fingers to zoom around the pointer. Drag to pan.
+  Horizontal scrolling and **Shift+wheel** pan sideways. **Alt+wheel** pans vertically.
+  With the image pane focused, **+ / −** zoom, **WASD** pans, **0** fits the image, and **1** shows actual pixels.
+  Double-click switches between fit and actual size. Modern Konsole keeps the full-color image in terminal memory while you navigate.
 - Press **Ctrl+R** in the session picker to rename the selected session. Press **Enter** to save or **Esc** to cancel.
   Archived sessions remain read-only. Existing list key bindings take precedence.
 - Press **Shift+Up/Down** to select prompt rows. **Shift+Left/Right/Home/End** also extends the selection.

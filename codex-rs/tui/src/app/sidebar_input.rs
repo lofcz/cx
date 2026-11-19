@@ -113,6 +113,10 @@ impl App {
         tui: &mut tui::Tui,
         mouse: crossterm::event::MouseEvent,
     ) -> PointerResult {
+        if self.continue_image_drag(mouse) {
+            tui.frame_requester().schedule_frame();
+            return PointerResult::Consumed;
+        }
         let point = (mouse.column, mouse.row).into();
         let frame = &self.conversation_frame;
         let over_strip = frame

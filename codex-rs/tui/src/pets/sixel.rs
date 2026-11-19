@@ -1,9 +1,5 @@
-//! Minimal Sixel encoder for pet sprites.
-//!
-//! This is intentionally not a general-purpose Sixel implementation. Pet frames
-//! are already small RGBA images by the time they reach this module, so the
-//! encoder uses deterministic RGB332 color reduction and transparent pixels are
-//! simply omitted from the emitted color planes.
+//! Sixel encoder for image previews and pet sprites. Frames use an RGB332
+//! palette and omit transparent pixels from each six-row band.
 
 use anyhow::Context;
 use anyhow::Result;
@@ -35,143 +31,78 @@ pub(crate) fn encode_rgba(rgba: &[u8], width: u32, height: u32) -> Result<Vec<u8
     output.extend_from_slice(TRANSPARENT_BACKGROUND_DCS);
     output.extend_from_slice(format!("\"1;1;{width};{height}").as_bytes());
     palette.write_definitions(&mut output);
-    write_pixels(&mut output, rgba, width, height, &palette)?;
+    write_pixels(&mut output, rgba, width as usize);
     output.extend_from_slice(ST);
     Ok(output)
 }
 
-fn write_pixels(
-    output: &mut Vec<u8>,
-    rgba: &[u8],
-    width: u32,
-    height: u32,
-    palette: &Palette,
-) -> Result<()> {
-    let band_count = height.div_ceil(SIXEL_BAND_HEIGHT);
-    for band_index in 0..band_count {
-        let band_top = band_index * SIXEL_BAND_HEIGHT;
-        let colors = active_colors_for_band(rgba, width, height, band_top, palette)?;
-        for (position, color_index) in colors.iter().enumerate() {
-            output.extend_from_slice(format!("#{color_index}").as_bytes());
-            let mut run_char = None;
-            let mut run_len = 0usize;
-            for x in 0..width {
-                let data = sixel_data_for_column(rgba, width, height, band_top, x, *color_index)?;
-                push_run(&mut run_char, &mut run_len, output, data);
+/// Build sparse color planes in a single pass over each six-row band. A
+/// photograph can use every palette entry in a single band; scanning the
+/// original pixels again for every entry makes viewport-sized frames too slow.
+fn write_pixels(output: &mut Vec<u8>, rgba: &[u8], width: usize) {
+    use std::io::Write as _;
+    let pixels = rgba.as_chunks::<4>().0;
+    let mut planes: [Vec<(usize, u8)>; PALETTE_COLOR_COUNT] = std::array::from_fn(|_| Vec::new());
+    for (band_index, band) in pixels
+        .chunks(SIXEL_BAND_HEIGHT as usize * width)
+        .enumerate()
+    {
+        if band_index > 0 {
+            output.push(b'-');
+        }
+        for x in 0..width {
+            for (bit, row) in band.chunks_exact(width).enumerate() {
+                let [r, g, b, a] = row[x];
+                if a < TRANSPARENT_ALPHA_THRESHOLD {
+                    continue;
+                }
+                let plane = &mut planes[usize::from(rgb332_index(r, g, b))];
+                if let Some((last, mask)) = plane.last_mut()
+                    && *last == x
+                {
+                    *mask |= 1 << bit;
+                } else {
+                    plane.push((x, 1 << bit));
+                }
             }
-            flush_run(&mut run_char, &mut run_len, output);
-            if position + 1 < colors.len() {
+        }
+        let mut first = true;
+        for (color, plane) in planes.iter_mut().enumerate().filter(|(_, p)| !p.is_empty()) {
+            if !first {
                 output.push(b'$');
             }
-        }
-
-        if band_index + 1 < band_count {
-            if colors.is_empty() {
-                output.push(b'-');
-            } else {
-                output.extend_from_slice(b"$-");
+            first = false;
+            let _ = write!(output, "#{color}");
+            let mut cursor = 0;
+            let mut iter = plane.iter().copied().peekable();
+            while let Some((x, mask)) = iter.next() {
+                write_run(output, b'?', x - cursor);
+                let mut end = x + 1;
+                while iter
+                    .next_if(|&(next, m)| next == end && m == mask)
+                    .is_some()
+                {
+                    end += 1;
+                }
+                write_run(output, b'?' + mask, end - x);
+                cursor = end;
             }
+            plane.clear();
         }
-    }
-
-    Ok(())
-}
-
-fn active_colors_for_band(
-    rgba: &[u8],
-    width: u32,
-    height: u32,
-    band_top: u32,
-    palette: &Palette,
-) -> Result<Vec<u8>> {
-    let mut active = [false; PALETTE_COLOR_COUNT];
-    for y in band_top..height.min(band_top + SIXEL_BAND_HEIGHT) {
-        for x in 0..width {
-            if let Some(color_index) = color_index_at(rgba, width, x, y)? {
-                active[usize::from(color_index)] = true;
-            }
-        }
-    }
-
-    Ok(palette
-        .indices()
-        .filter(|color_index| active[usize::from(*color_index)])
-        .collect())
-}
-
-fn sixel_data_for_column(
-    rgba: &[u8],
-    width: u32,
-    height: u32,
-    band_top: u32,
-    x: u32,
-    color_index: u8,
-) -> Result<u8> {
-    let mut mask = 0u8;
-    for bit in 0..SIXEL_BAND_HEIGHT {
-        let y = band_top + bit;
-        if y >= height {
-            continue;
-        }
-
-        if color_index_at(rgba, width, x, y)? == Some(color_index) {
-            mask |= 1 << bit;
-        }
-    }
-
-    Ok(b'?' + mask)
-}
-
-fn color_index_at(rgba: &[u8], width: u32, x: u32, y: u32) -> Result<Option<u8>> {
-    let pixel_index = pixel_offset(width, x, y)?;
-    let alpha = rgba[pixel_index + 3];
-    if alpha < TRANSPARENT_ALPHA_THRESHOLD {
-        return Ok(None);
-    }
-
-    Ok(Some(rgb332_index(
-        rgba[pixel_index],
-        rgba[pixel_index + 1],
-        rgba[pixel_index + 2],
-    )))
-}
-
-fn push_run(run_char: &mut Option<u8>, run_len: &mut usize, output: &mut Vec<u8>, byte: u8) {
-    match *run_char {
-        Some(current) if current == byte => {
-            *run_len += 1;
-        }
-        _ => {
-            flush_run(run_char, run_len, output);
-            *run_char = Some(byte);
-            *run_len = 1;
+        if !first && (band_index + 1) * SIXEL_BAND_HEIGHT as usize * width < pixels.len() {
+            output.push(b'$');
         }
     }
 }
 
-fn flush_run(run_char: &mut Option<u8>, run_len: &mut usize, output: &mut Vec<u8>) {
-    let Some(byte) = run_char.take() else {
-        return;
-    };
-
-    if *run_len > 3 {
-        output.extend_from_slice(format!("!{}", *run_len).as_bytes());
-        output.push(byte);
+fn write_run(out: &mut Vec<u8>, byte: u8, len: usize) {
+    use std::io::Write as _;
+    if len > 3 {
+        let _ = write!(out, "!{len}");
+        out.push(byte);
     } else {
-        output.extend(std::iter::repeat_n(byte, *run_len));
+        out.extend(std::iter::repeat_n(byte, len));
     }
-    *run_len = 0;
-}
-
-fn pixel_offset(width: u32, x: u32, y: u32) -> Result<usize> {
-    let pixel_index = u64::from(y)
-        .checked_mul(u64::from(width))
-        .and_then(|row| row.checked_add(u64::from(x)))
-        .context("sixel pixel index overflow")?;
-    let byte_index = pixel_index
-        .checked_mul(4)
-        .context("sixel byte index overflow")?;
-    usize::try_from(byte_index).context("sixel byte index does not fit usize")
 }
 
 fn pixel_count(width: u32, height: u32) -> Result<usize> {

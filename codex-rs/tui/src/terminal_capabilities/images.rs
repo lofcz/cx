@@ -183,6 +183,32 @@ fn is_iterm2_terminal(info: &TerminalInfo) -> bool {
         || terminal_field_contains(info.term_program.as_deref(), "iterm")
 }
 
+impl ImageProtocol {
+    pub(crate) fn for_sidebar(self) -> Self {
+        if self != Self::Sixel {
+            return self;
+        }
+        if konsole_supports_crop(&terminal_info()) {
+            Self::Kitty
+        } else {
+            self
+        }
+    }
+}
+
+fn konsole_supports_crop(info: &TerminalInfo) -> bool {
+    // KONSOLE_VERSION is YYMMpp, TERM_PROGRAM_VERSION can be dotted.
+    info.name == TerminalName::Konsole
+        && info.multiplexer.is_none()
+        && info.version.as_deref().is_some_and(|version| {
+            if version.contains('.') {
+                version_is_at_least(Some(version), (22, 4, 0))
+            } else {
+                version.parse::<u32>().is_ok_and(|packed| packed >= 220400)
+            }
+        })
+}
+
 fn supports_kitty_graphics(info: &TerminalInfo) -> bool {
     matches!(
         info.name,

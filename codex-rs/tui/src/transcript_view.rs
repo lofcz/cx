@@ -530,6 +530,7 @@ impl TranscriptView {
                         (bottom - top) as u16,
                     ),
                     first_row: top - start,
+                    crop: None,
                     file: None,
                     terminal_id: None,
                 });
