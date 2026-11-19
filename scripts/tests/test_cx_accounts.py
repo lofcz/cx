@@ -78,6 +78,30 @@ class AccountProfiles(unittest.TestCase):
             self.cx("--import-auth", data=exported)
             self.assertEqual(self.cx("--export-auth"), exported)
 
+    def test_add_remove_and_reimport(self):
+        self.cx("-c", 'forced_login_method="api"', "accounts", "add", "work",
+                success=False, expected_stderr=b"ChatGPT login is disabled")
+        profile = self.root / "cx-accounts" / "profile-work"
+        self.assertTrue(profile.is_dir())
+        self.add("work")
+        self.cx("accounts", "use", "work")
+        history = profile / "history.jsonl"
+        history.write_text("retained history")
+        with patch.dict(self.env, {"CODEX_REVOKE_TOKEN_URL_OVERRIDE": "http://127.0.0.1:1/revoke"}):
+            self.cx("accounts", "remove", "work")
+        self.assertFalse((profile / "auth.json").exists())
+        self.assertEqual(history.read_text(), "retained history")
+        self.assertEqual(self.cx("accounts", "current").strip(), b"default")
+        self.cx("accounts", "use", "work", success=False)
+        self.cx("--account", "work", "--import-auth", data=b"broken", success=False)
+        self.cx("--account", "work", "login", "status", success=False)
+        self.assertEqual([row["name"] for row in json.loads(self.cx("accounts", "list", "--json"))["accounts"]], ["default"])
+        self.add("work")
+        self.cx("accounts", "use", "work")
+        self.assertEqual(self.cx("accounts", "current").strip(), b"work")
+        for name in ("default", "auto"):
+            self.cx("accounts", "remove", name, success=False)
+
     def test_quota_owner_cache_and_rotation(self):
         requests = []
         class Handler(BaseHTTPRequestHandler):

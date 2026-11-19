@@ -43,6 +43,26 @@ pub(super) struct Accounts {
 
 #[derive(Debug, Commands)]
 enum Action {
+    /// Add a named account and start its login.
+    Add {
+        #[arg(value_parser = account_name)]
+        name: String,
+    },
+    /// Sign out and remove a named account from selection, keeping its local history.
+    Remove {
+        #[arg(value_parser = account_name)]
+        name: String,
+    },
+    /// Sign in to a profile.
+    Login {
+        #[arg(value_parser = account_name)]
+        name: String,
+    },
+    /// Sign out of a profile without removing it.
+    Logout {
+        #[arg(value_parser = account_name)]
+        name: String,
+    },
     /// Show remaining quota, reset times and available reset credits.
     List {
         #[arg(long)]
@@ -99,6 +119,7 @@ fn names(root: &Path) -> Result<Vec<String>> {
                         .and_then(|s| account_name(s).ok())
                     && name != "default"
                     && name != "auto"
+                    && !entry.path().join("cx-account-removed").try_exists()?
                 {
                     names.push(name);
                 }
@@ -138,17 +159,21 @@ fn profile_command(root: &Path, name: &str) -> Result<Command> {
     Ok(cmd)
 }
 
+fn create_home(path: &Path) -> io::Result<()> {
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(path)
+}
+
 fn launch(root: &Path, name: &str, create: bool, remote_control_disabled: bool) -> Result<()> {
     let path = home(root, name);
     if create {
-        let mut builder = fs::DirBuilder::new();
-        builder.recursive(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::DirBuilderExt;
-            builder.mode(0o700);
-        }
-        builder.create(&path)?;
+        create_home(&path)?;
     }
     ensure!(
         path.is_dir(),
@@ -261,11 +286,29 @@ pub(super) async fn dispatch(
         } else {
             name.to_string()
         };
+        let removed = home(root, &chosen).join("cx-account-removed");
+        let login = matches!(command, Some(Subcommand::Login(options)) if options.action.is_none());
+        if chosen != "default" && removed.try_exists()? {
+            ensure!(
+                options.import_auth || login,
+                "Account {chosen} has been removed"
+            );
+            if login && pinned != Some(chosen.as_str()) {
+                let mut cmd = profile_command(root, &chosen)?;
+                if remote_control_disabled {
+                    cmd.env("CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED", "1");
+                }
+                let status = cmd.args(std::env::args_os().skip(1)).status()?;
+                ensure!(status.success(), "Login failed for {chosen}");
+                fs::remove_file(removed)?;
+                return Ok(true);
+            }
+        }
         if pinned != Some(chosen.as_str()) {
             launch(
                 root,
                 &chosen,
-                options.import_auth || matches!(command, Some(Subcommand::Login(_))),
+                options.import_auth || login,
                 remote_control_disabled,
             )?;
         }
@@ -278,6 +321,12 @@ pub(super) async fn dispatch(
         serde_json::to_writer(io::stdout().lock(), &quota(&config).await?)?;
     } else {
         transfer_auth(&config, options.import_auth)?;
+        if options.import_auth && pinned.is_some_and(|name| name != "default") {
+            let marker = current.join("cx-account-removed");
+            if marker.try_exists()? {
+                fs::remove_file(marker)?;
+            }
+        }
     }
     Ok(true)
 }
@@ -515,6 +564,61 @@ fn choose(rows: &[Row]) -> Result<String> {
 }
 
 async fn manage(root: &Path, accounts: &Accounts, overrides: &CliConfigOverrides) -> Result<()> {
+    match &accounts.action {
+        Some(
+            Action::Add { name }
+            | Action::Login { name }
+            | Action::Logout { name }
+            | Action::Remove { name },
+        ) => {
+            let remove = matches!(accounts.action, Some(Action::Remove { .. }));
+            let add = matches!(accounts.action, Some(Action::Add { .. }));
+            ensure!(
+                name != "auto" && (!(add || remove) || name != "default"),
+                "Choose a named account"
+            );
+            let profile = home(root, name);
+            let marker = profile.join("cx-account-removed");
+            if add {
+                ensure!(
+                    !names(root)?.contains(name),
+                    "Account {name} already exists. Use accounts login {name} to sign in again"
+                );
+                create_home(&profile)?;
+                fs::write(&marker, b"")?;
+            } else if remove {
+                ensure!(names(root)?.contains(name), "Unknown account {name}");
+            }
+            let action = if remove || matches!(accounts.action, Some(Action::Logout { .. })) {
+                "logout"
+            } else {
+                "login"
+            };
+            let status = Command::new(std::env::current_exe()?)
+                .args(
+                    overrides
+                        .raw_overrides
+                        .iter()
+                        .flat_map(|value| ["-c", value.as_str()]),
+                )
+                .arg(format!("--account={name}"))
+                .arg(action)
+                .status()?;
+            ensure!(status.success(), "Account {action} failed");
+            if action == "login" && marker.try_exists()? {
+                fs::remove_file(&marker)?;
+            }
+            if remove {
+                if read_selection(root)?.as_ref() == Some(name) {
+                    select(root, "default")?;
+                }
+                fs::write(marker, b"")?;
+                println!("Removed account {name}. Local history was retained.");
+            }
+            return Ok(());
+        }
+        _ => (),
+    }
     if let Some(Action::Use { name }) = &accounts.action {
         return select(root, name);
     }
@@ -567,18 +671,28 @@ async fn manage(root: &Path, accounts: &Accounts, overrides: &CliConfigOverrides
         }
     }
     if accounts.action.is_none() && io::stdin().is_terminal() && io::stdout().is_terminal() {
-        print!("Enter an account, auto, login NAME or logout NAME (Enter to keep {selected}): ");
+        print!(
+            "Choose a name or auto, or enter add/remove/login/logout/use NAME (Enter to keep {selected}): "
+        );
         io::stdout().flush()?;
         let mut line = String::new();
         io::stdin().read_line(&mut line)?;
         match line.split_whitespace().collect::<Vec<_>>().as_slice() {
             [] => (),
             [name] => select(root, &account_name(name).map_err(anyhow::Error::msg)?)?,
-            [action @ ("login" | "logout"), name] => {
+            [
+                action @ ("add" | "remove" | "login" | "logout" | "use"),
+                name,
+            ] => {
                 let name = account_name(name).map_err(anyhow::Error::msg)?;
-                ensure!(name != "auto", "Choose a specific account");
                 let status = Command::new(std::env::current_exe()?)
-                    .args(["--account", &name, action])
+                    .args(
+                        overrides
+                            .raw_overrides
+                            .iter()
+                            .flat_map(|value| ["-c", value.as_str()]),
+                    )
+                    .args(["accounts", action, "--", &name])
                     .status()?;
                 ensure!(status.success(), "Account {action} failed");
             }
