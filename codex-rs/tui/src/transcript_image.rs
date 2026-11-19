@@ -29,6 +29,8 @@ pub(crate) struct ImagePlacement {
     pub(crate) image: Arc<TranscriptImage>,
     pub(crate) area: Rect,
     pub(crate) first_row: usize,
+    /// Native viewers can place a source rectangle from an already uploaded image.
+    pub(crate) crop: Option<image::math::Rect>,
     pub(crate) file: Option<tempfile::NamedTempFile>,
     pub(crate) terminal_id: Option<u32>,
 }
@@ -40,6 +42,7 @@ impl ImagePlacement {
             image: Arc::clone(&self.image),
             area: self.area,
             first_row: self.first_row,
+            crop: self.crop,
             file: None,
             terminal_id: None,
         }
@@ -51,6 +54,7 @@ impl PartialEq for ImagePlacement {
         Arc::ptr_eq(&self.image, &other.image)
             && self.area == other.area
             && self.first_row == other.first_row
+            && self.crop == other.crop
     }
 }
 
@@ -58,7 +62,9 @@ pub(crate) struct TranscriptImage {
     pub(crate) protocol: ImageProtocol,
     pub(crate) columns: u16,
     pub(crate) rows: u16,
-    pub(crate) pixels: RgbaImage,
+    pub(crate) pixels: Arc<RgbaImage>,
+    /// Full-frame PNG or Sixel prepared by the sidebar's background renderer.
+    pub(crate) encoded: Option<Vec<u8>>,
     pub(crate) cell_width: u32,
     pub(crate) cell_height: u32,
 }
@@ -159,7 +165,8 @@ impl TranscriptImage {
             protocol,
             columns: pixels.width().div_ceil(cell_width) as u16,
             rows: pixels.height().div_ceil(cell_height) as u16,
-            pixels,
+            pixels: Arc::new(pixels),
+            encoded: None,
             cell_width,
             cell_height,
         })
@@ -171,8 +178,60 @@ impl TranscriptImage {
         writer: &mut impl Write,
         area: Rect,
         first_row: usize,
+        crop: Option<image::math::Rect>,
         placement: KittyPlacement,
     ) -> Result<Option<tempfile::NamedTempFile>> {
+        let encoded;
+        let bytes = if let Some(bytes) = &self.encoded {
+            bytes.as_slice()
+        } else if let Ok(Some(slice)) = self.encode_rows(area, first_row) {
+            encoded = slice;
+            &encoded
+        } else {
+            return Ok(None);
+        };
+        let mut file = None;
+        let command;
+        let payload = match (self.protocol, placement, crop) {
+            (ImageProtocol::Kitty, KittyPlacement::Cursor(id), Some(source)) => {
+                command =
+                    crate::pets::kitty_png_command(bytes, &format!("a=t,t=d,f=100,q=2,i={id}"))
+                        + &crate::pets::kitty_place_image(id, area, Some(source), false);
+                command.as_bytes()
+            }
+            (ImageProtocol::Kitty, _, _) => {
+                command = crate::pets::kitty_display_png(bytes, area.width, area.height, placement);
+                command.as_bytes()
+            }
+            (ImageProtocol::KittyLocalFile, _, _) => {
+                // Transport-file failures leave the text UI available.
+                let Ok(mut png) = tempfile::Builder::new().suffix(".png").tempfile() else {
+                    return Ok(None);
+                };
+                if png.write_all(bytes).is_err() {
+                    return Ok(None);
+                }
+                let Ok(cmd) = crate::pets::kitty_transmit_png_file_with_id(
+                    png.path(),
+                    area.width,
+                    area.height,
+                    placement,
+                ) else {
+                    return Ok(None);
+                };
+                command = cmd;
+                file = Some(png);
+                command.as_bytes()
+            }
+            (ImageProtocol::Sixel, _, _) => bytes,
+        };
+        queue!(writer, SavePosition)?;
+        placement.draw(writer, area, payload)?;
+        queue!(writer, RestorePosition)?;
+        Ok(file)
+    }
+
+    fn encode_rows(&self, area: Rect, first_row: usize) -> Result<Option<Vec<u8>>> {
         let (top, bottom) = match self.protocol {
             ImageProtocol::Sixel => (
                 first_row as u32 * self.cell_height,
@@ -191,36 +250,18 @@ impl TranscriptImage {
             return Ok(None);
         }
         let cropped =
-            image::imageops::crop_imm(&self.pixels, 0, top, self.pixels.width(), height).to_image();
-        let mut file = None;
-        // Encoding and temp-file failures must not abort the TUI. Only writes to the actual
-        // terminal below are fatal; the existing text entry remains usable without its preview.
-        let payload = (|| -> Result<_> {
-            Ok(match self.protocol {
-                ImageProtocol::Kitty | ImageProtocol::KittyLocalFile => {
-                    let mut png = tempfile::Builder::new().suffix(".png").tempfile()?;
-                    DynamicImage::ImageRgba8(cropped).write_to(&mut png, ImageFormat::Png)?;
-                    png.flush()?;
-                    let transmit = if self.protocol == ImageProtocol::KittyLocalFile {
-                        crate::pets::kitty_transmit_png_file_with_id
-                    } else {
-                        crate::pets::kitty_transmit_png_with_id
-                    };
-                    let command = transmit(png.path(), self.columns, area.height, placement)?;
-                    file = (self.protocol == ImageProtocol::KittyLocalFile).then_some(png);
-                    command.into_bytes()
-                }
-                ImageProtocol::Sixel => {
-                    crate::pets::encode_rgba(cropped.as_raw(), cropped.width(), cropped.height())?
-                }
-            })
-        })();
-        let Ok(payload) = payload else {
-            return Ok(None);
+            image::imageops::crop_imm(self.pixels.as_ref(), 0, top, self.pixels.width(), height)
+                .to_image();
+        let bytes = match self.protocol {
+            ImageProtocol::Kitty | ImageProtocol::KittyLocalFile => {
+                let mut png = std::io::Cursor::new(Vec::new());
+                DynamicImage::ImageRgba8(cropped).write_to(&mut png, ImageFormat::Png)?;
+                png.into_inner()
+            }
+            ImageProtocol::Sixel => {
+                crate::pets::encode_rgba(cropped.as_raw(), cropped.width(), cropped.height())?
+            }
         };
-        queue!(writer, SavePosition)?;
-        placement.draw(writer, area, &payload)?;
-        queue!(writer, RestorePosition)?;
-        Ok(file)
+        Ok(Some(bytes))
     }
 }

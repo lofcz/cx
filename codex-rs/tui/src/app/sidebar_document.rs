@@ -424,16 +424,25 @@ impl Document {
         let path_actions_available = self.path_actions_available() && body.height > 2;
         if !matches!(self.state, State::Ready { .. }) {
             let (base, max_rows) = match &self.state {
-                State::Image(_) => (
-                    vec![
+                State::Image(_) => {
+                    let mut hints = Vec::new();
+                    if image_protocol.is_some() {
+                        hints.extend([
+                            crate::footer_hint::shortcut("Wheel", "zoom"),
+                            crate::footer_hint::shortcut("Drag", "pan"),
+                            crate::footer_hint::shortcut("0", "fit"),
+                            crate::footer_hint::shortcut("1", "1:1"),
+                        ]);
+                    }
+                    hints.extend([
                         crate::footer_hint::shortcut(
                             &crate::key_hint::plain(KeyCode::Esc).display_label(),
                             "close",
                         ),
                         crate::footer_hint::shortcut("←/→", "tabs"),
-                    ],
-                    body.height.saturating_sub(1).min(2),
-                ),
+                    ]);
+                    (hints, body.height.saturating_sub(1).min(2))
+                }
                 State::Failed { error, .. } => {
                     let count = open_error::lines(&self.path, error, body.width).len();
                     let close = (count + 2 < usize::from(body.height)).then(|| {
@@ -492,9 +501,13 @@ impl Document {
                     .render(body, buf);
             }
             State::Image(image) => {
-                frame
-                    .image_placements
-                    .extend(image.paint(body, buf, image_protocol))
+                frame.image_placements.extend(image.paint(
+                    body,
+                    buf,
+                    image_protocol,
+                    motion,
+                    frames,
+                ))
             }
             State::Loading(started) => {
                 let glyph = crate::motion::loading_glyph(*started, motion, frames);
@@ -879,6 +892,30 @@ impl App {
         Some(request)
     }
 
+    /// A pan that starts on the image owns motion and release even over another pane or tab.
+    pub(super) fn continue_image_drag(&mut self, mouse: crossterm::event::MouseEvent) -> bool {
+        if !matches!(
+            mouse.kind,
+            MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Up(MouseButton::Left)
+        ) {
+            return false;
+        }
+        let Some(pane) = self.sidebars.get_mut(&self.sidebar_parent()) else {
+            return false;
+        };
+        let Some(SidebarContent::Document(id)) = pane.visible_content() else {
+            return false;
+        };
+        let Some(Document {
+            state: State::Image(image),
+            ..
+        }) = pane.documents.get_mut(&id)
+        else {
+            return false;
+        };
+        image.mouse(mouse)
+    }
+
     pub(super) async fn handle_document_input(
         &mut self,
         tui: &mut tui::Tui,
@@ -955,7 +992,10 @@ impl App {
                     tui.frame_requester().schedule_frame();
                     return true;
                 }
-                if let State::Ready {
+                if let State::Image(image) = &mut doc.state {
+                    image.key(*key);
+                    None
+                } else if let State::Ready {
                     view,
                     cells,
                     target,
@@ -1065,6 +1105,9 @@ impl App {
                     if let (Some(panel), Some(action)) = (panel, action) {
                         doc.path_actions.scroll_path(panel, &doc.path, action);
                     }
+                    None
+                } else if let State::Image(image) = &mut doc.state {
+                    image.mouse(*mouse);
                     None
                 } else if let State::Ready { view, cells, .. } = &mut doc.state {
                     doc.link = None;
