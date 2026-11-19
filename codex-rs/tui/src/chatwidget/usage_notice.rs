@@ -46,6 +46,8 @@ impl UsageNoticeState {
             return None;
         }
         Some(crate::bottom_pane::UsageIndicator {
+            account: None,
+            reset_credits: None,
             used_percent: window.map_or(0, |window| window.used_percent),
             resets_at: window.and_then(|window| window.resets_at),
             unlimited,
@@ -149,16 +151,45 @@ pub(super) fn warning_threshold(plan_type: Option<PlanType>, window_minutes: Opt
 }
 
 impl ChatWidget {
+    pub(super) fn account_label(&self) -> Option<&'static str> {
+        static NAME: std::sync::LazyLock<Option<String>> = std::sync::LazyLock::new(|| {
+            std::env::var("CODEX_INTERNAL_CX_ACCOUNT_NAME")
+                .ok()
+                .filter(|name| {
+                    !name.is_empty()
+                        && name.len() <= 32
+                        && name.bytes().all(|b| {
+                            b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'-' | b'_')
+                        })
+                })
+        });
+        if self
+            .remote_connection
+            .as_ref()
+            .is_some_and(|remote| !remote.is_local_daemon)
+        {
+            return None;
+        }
+        NAME.as_deref()
+    }
+
+    pub(super) fn account_usage_indicator(&self) -> Option<crate::bottom_pane::UsageIndicator> {
+        let mut indicator = self.usage_notice_state.indicator(
+            self.clock_format,
+            self.input_queue.quota_exhausted
+                || self.codex_rate_limit_reached_type.is_some()
+                || self.codex_spend_control_reached == Some(true),
+        )?;
+        indicator.account = self.account_label();
+        if indicator.account.is_some() {
+            indicator.reset_credits = self.available_rate_limit_reset_credits;
+        }
+        Some(indicator)
+    }
+
     #[cfg(test)]
     pub(crate) fn usage_notice(&self, width: u16) -> Option<Line<'static>> {
-        self.usage_notice_state
-            .indicator(
-                self.clock_format,
-                self.input_queue.quota_exhausted
-                    || self.codex_rate_limit_reached_type.is_some()
-                    || self.codex_spend_control_reached == Some(true),
-            )?
-            .line(width, Local::now())
+        self.account_usage_indicator()?.line(width, Local::now())
     }
 
     pub(crate) fn start_usage_notice_read(&mut self, request_id: u64) {

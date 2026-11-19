@@ -51,6 +51,7 @@ use std::sync::Arc;
 #[global_allocator]
 static ALLOCATOR: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
+mod accounts;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod app_cmd;
 mod app_server_proxy;
@@ -127,6 +128,9 @@ use codex_protocol::user_input::UserInput;
     override_usage = "cx [OPTIONS] [PROMPT]\n       cx [OPTIONS] <COMMAND> [ARGS]"
 )]
 struct MultitoolCli {
+    #[command(flatten)]
+    account_options: accounts::Options,
+
     #[clap(flatten)]
     pub config_overrides: CliConfigOverrides,
 
@@ -158,6 +162,9 @@ enum Subcommand {
 
     /// Run a code review non-interactively.
     Review(ReviewCommand),
+
+    /// List account quotas and choose the account for new sessions.
+    Accounts(accounts::Accounts),
 
     /// Manage login.
     Login(LoginCommand),
@@ -1019,6 +1026,7 @@ async fn dispatch_cli(
     remote_control_disabled: bool,
 ) -> anyhow::Result<Option<impl Future<Output = anyhow::Result<()>>>> {
     let MultitoolCli {
+        account_options,
         config_overrides: mut root_config_overrides,
         feature_toggles,
         remote,
@@ -1055,6 +1063,20 @@ async fn dispatch_cli(
     {
         anyhow::bail!("`cx agents` received conflicting remote server endpoints");
     }
+    let uses_remote_account = remote.remote.is_some()
+        || session_remote.is_some_and(|(_, options)| options.remote.is_some())
+        || matches!(subcommand.as_ref(), Some(Subcommand::Exec(exec)) if exec.remote.is_some());
+    if accounts::dispatch(
+        &account_options,
+        subcommand.as_ref(),
+        &root_config_overrides,
+        remote_control_disabled,
+        uses_remote_account,
+    )
+    .await?
+    {
+        return Ok(None);
+    }
     let root_remote = agents_options
         .and_then(|options| options.remote.remote.clone())
         .or(remote.remote);
@@ -1084,6 +1106,7 @@ async fn dispatch_cli(
     };
     let open_agents_overview = matches!(&subcommand, Some(Subcommand::Agents(_)));
     match subcommand {
+        Some(Subcommand::Accounts(_)) => unreachable!("handled before runtime startup"),
         None | Some(Subcommand::Agents(_)) => {
             prepend_config_flags(
                 &mut interactive.config_overrides,
@@ -2404,6 +2427,7 @@ fn unsupported_subcommand_name_for_strict_config(
         Some(Subcommand::MigrateNfsDb(_)) => Some("migrate-nfs-db"),
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         Some(Subcommand::App(_)) => Some("app"),
+        Some(Subcommand::Accounts(_)) => Some("accounts"),
         Some(Subcommand::Login(_)) => Some("login"),
         Some(Subcommand::GitCredential(_)) => Some("git-credential"),
         Some(Subcommand::Logout(_)) => Some("logout"),
@@ -2893,6 +2917,7 @@ enabled = true
             subcommand,
             feature_toggles: _,
             remote: _,
+            ..
         } = cli;
         let Subcommand::Resume(ResumeCommand {
             session_id,
@@ -2926,6 +2951,7 @@ enabled = true
             subcommand,
             feature_toggles: _,
             remote: _,
+            ..
         } = cli;
         interactive
             .shared
@@ -2970,6 +2996,7 @@ enabled = true
             subcommand,
             feature_toggles: _,
             remote: _,
+            ..
         } = cli;
 
         let Subcommand::Archive(SessionArchiveCommand {
