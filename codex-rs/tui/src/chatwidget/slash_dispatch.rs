@@ -578,6 +578,7 @@ impl ChatWidget {
                     /*hint*/ None,
                 );
             }
+            SlashCommand::Accounts => self.app_event_tx.send(AppEvent::ManageAccounts(Vec::new())),
             SlashCommand::Usage => {
                 if self.ensure_usage_command_available() {
                     self.open_usage_menu();
@@ -866,6 +867,14 @@ impl ChatWidget {
             SlashCommand::Cd => self.request_working_directory_change(trimmed),
             SlashCommand::Pwd => {
                 self.add_error_message("Usage: /pwd".to_string());
+            }
+            SlashCommand::Accounts => {
+                let args = trimmed.split_whitespace().collect::<Vec<_>>();
+                match args.as_slice() {
+                    ["list" | "current"] | ["list", "--json"] | ["add" | "remove" | "login" | "logout" | "use", _] =>
+                        self.app_event_tx.send(AppEvent::ManageAccounts(args.into_iter().map(str::to_owned).collect())),
+                    _ => self.add_error_message("Usage: /accounts [list | current | add NAME | remove NAME | login NAME | logout NAME | use NAME]".into()),
+                }
             }
             SlashCommand::Usage => {
                 if self.ensure_usage_command_available() {
@@ -1350,6 +1359,7 @@ impl ChatWidget {
             | SlashCommand::Daemon
             | SlashCommand::Rc
             | SlashCommand::Pwd
+            | SlashCommand::Accounts
             | SlashCommand::Usage
             | SlashCommand::DebugConfig
             | SlashCommand::Ps

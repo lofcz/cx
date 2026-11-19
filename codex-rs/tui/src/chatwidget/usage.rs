@@ -14,6 +14,60 @@ const RATE_LIMIT_RESET_VIEW_ID: &str = "rate-limit-reset";
 const RATE_LIMIT_RESET_CONFIRMATION_VIEW_ID: &str = "rate-limit-reset-confirmation";
 
 impl ChatWidget {
+    pub(crate) fn open_accounts_menu(&mut self) {
+        let items = [
+            ("List accounts and quotas", "list", false),
+            ("Select account for new sessions", "use", true),
+            ("Enable automatic rotation", "auto", false),
+            ("Add account", "add", true),
+            ("Remove account", "remove", true),
+            ("Log in", "login", true),
+            ("Log out", "logout", true),
+        ]
+        .into_iter()
+        .map(|(title, action, needs_name)| SelectionItem {
+            name: title.into(),
+            actions: vec![Box::new(move |tx| {
+                if needs_name {
+                    tx.send(AppEvent::AccountNamePrompt { title, action });
+                } else if action == "auto" {
+                    tx.send(AppEvent::ManageAccounts(vec!["use".into(), "auto".into()]));
+                } else {
+                    tx.send(AppEvent::ManageAccounts(vec![action.into()]));
+                }
+            })],
+            dismiss_on_select: true,
+            ..Default::default()
+        })
+        .collect();
+        self.bottom_pane.show_selection_view(SelectionViewParams {
+            title: Some("Accounts".into()),
+            subtitle: Some(format!(
+                "Current session: {}",
+                self.account_label().unwrap_or("default")
+            )),
+            items,
+            ..SelectionViewParams::picker()
+        });
+    }
+
+    pub(crate) fn account_name_prompt(&mut self, title: &'static str, action: &'static str) {
+        let tx = self.app_event_tx.clone();
+        self.bottom_pane.show_text_prompt(CustomPromptView::new(
+            title.into(),
+            "Account name".into(),
+            String::new(),
+            (action == "remove")
+                .then(|| "Signs out this profile and keeps its session history.".into()),
+            Box::new(move |name| {
+                tx.send(AppEvent::ManageAccounts(vec![
+                    action.into(),
+                    name.trim().into(),
+                ]))
+            }),
+        ));
+    }
+
     pub(super) fn open_usage_menu(&mut self) {
         self.clear_pending_rate_limit_reset_hint();
         let should_refresh_reset_availability = self.available_rate_limit_reset_credits == Some(0);

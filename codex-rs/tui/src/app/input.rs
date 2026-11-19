@@ -409,6 +409,56 @@ impl App {
         true
     }
 
+    pub(super) async fn manage_accounts(&mut self, tui: &mut tui::Tui, args: Vec<String>) {
+        let result: std::io::Result<String> = async {
+            let mut cmd = tokio::process::Command::new(std::env::current_exe()?);
+            for (key, value) in &self.cli_kv_overrides {
+                cmd.arg("-c").arg(format!("{key}={value}"));
+            }
+            cmd.arg("accounts");
+            if let [action, name] = args.as_slice()
+                && action != "list"
+            {
+                cmd.args([action.as_str(), "--", name]);
+            } else {
+                cmd.args(&args);
+            }
+            if matches!(args.first().map(String::as_str), Some("add" | "login")) {
+                let status = tui
+                    .with_restored(tui::TerminalHandoff::Restore, || async {
+                        cmd.status().await
+                    })
+                    .await?;
+                if status.success() {
+                    return Ok(format!("Signed in to account {}.", args[1]));
+                }
+                return Err(std::io::Error::other(format!(
+                    "account manager exited with {status}"
+                )));
+            }
+            let output = cmd.output().await?;
+            if !output.status.success() {
+                return Err(std::io::Error::other(
+                    String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+                ));
+            }
+            let message = String::from_utf8_lossy(&output.stdout);
+            Ok(if message.trim().is_empty() {
+                format!("Account command completed: {}", args.join(" "))
+            } else {
+                message.trim().to_owned()
+            })
+        }
+        .await;
+        match result {
+            Ok(message) => self.chat_widget.add_info_message(message, None),
+            Err(err) => self
+                .chat_widget
+                .add_error_message(format!("Account manager: {err}")),
+        }
+        tui.frame_requester().schedule_frame();
+    }
+
     pub(super) async fn launch_external_editor(&mut self, tui: &mut tui::Tui) {
         self.chat_widget
             .empty_state_animation
