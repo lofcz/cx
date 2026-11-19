@@ -41,7 +41,7 @@ Codex++ workflow orchestration and provider support remain available.
 
 ## Multiple ChatGPT accounts
 
-Your existing login is called `default`. Create another with `cx --account work login`. Run `cx accounts` to see each account’s remaining quota, limiting window reset time, and available reset credits. Enter a name to select it, or enter `login NAME` or `logout NAME` to manage its login.
+Your existing login is called `default`. Create another with `cx accounts add work`. Use `/accounts` inside CX for the account menu, or enter commands such as `/accounts use work` and `/accounts remove work` directly. Removing a profile signs it out and retains its local session history. Run `cx accounts` to see each account’s remaining quota, limiting window reset time, and available reset credits. Enter a name to select it, or enter `login NAME` or `logout NAME` to manage its login.
 
 ```sh
 cx accounts list --json
