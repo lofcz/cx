@@ -56,7 +56,7 @@ cx --account work --export-auth | ssh worker cx --account work --import-auth
 
 `--export-auth` writes the selected ChatGPT OAuth credentials to stdout. Treat the output like a password. `--import-auth` reads the document from stdin and replaces that profile’s saved login. For devices that run continuously in parallel, sign in separately on each device so each installation can refresh its own login.
 
-In `auto` mode, each new local session or job selects the available account with the most remaining quota across its limiting windows. Account quota checks can be reused for 30 seconds. A running job keeps its account, including during retries and reset claims. The local usage footer and reset confirmation identify the selected profile. Use `--account NAME` for a resume, fork, or other operation on existing account state. Each named profile has its own configuration, session history, and credential store under `CODEX_HOME/cx-accounts`.
+In `auto` mode, each new local session or job selects the available account with the most remaining quota across its limiting windows. Account quota checks can be reused for 30 seconds. A running job keeps its account, including during retries and reset claims. The local usage footer and reset confirmation identify the selected profile. All profiles share one `CODEX_HOME`: configuration, sessions, history and resume/fork work the same whichever account runs them, so `auto` can resume a session started on another account. Only each profile's login and quota cache live apart under `CODEX_HOME/cx-accounts/profile-NAME`; `default` uses the login in `CODEX_HOME` itself. Commands that never call the model (`mcp`, `doctor`, `archive`, …) skip the quota check in `auto` and run as `default`.
 
 ## Local launcher
 

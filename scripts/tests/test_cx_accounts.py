@@ -72,8 +72,12 @@ class AccountProfiles(unittest.TestCase):
         self.cx("accounts", "use", "second")
         with patch.dict(self.env, {"CODEX_INTERNAL_CX_ACCOUNTS_ROOT": str(self.root),
                                    "CODEX_INTERNAL_CX_ACCOUNT_NAME": "first",
-                                   "CODEX_HOME": str(self.root / "cx-accounts" / "profile-first")}):
+                                   "CODEX_INTERNAL_CX_AUTH_HOME": str(self.root / "cx-accounts" / "profile-first")}):
             self.assertEqual(self.cx("--export-auth"), exported)
+        # Profiles hold only credentials; configuration and history stay in the shared home.
+        for profile in (self.root / "cx-accounts").glob("profile-*"):
+            self.assertFalse((profile / "config.toml").exists())
+            self.assertFalse(list(profile.glob("*.sqlite")))
         with tempfile.TemporaryDirectory() as device, patch.dict(self.env, {"CODEX_HOME": device}):
             self.cx("--import-auth", data=exported)
             self.assertEqual(self.cx("--export-auth"), exported)
@@ -85,7 +89,7 @@ class AccountProfiles(unittest.TestCase):
         self.assertTrue(profile.is_dir())
         self.add("work")
         self.cx("accounts", "use", "work")
-        history = profile / "history.jsonl"
+        history = self.root / "history.jsonl"
         history.write_text("retained history")
         with patch.dict(self.env, {"CODEX_REVOKE_TOKEN_URL_OVERRIDE": "http://127.0.0.1:1/revoke"}):
             self.cx("accounts", "remove", "work")

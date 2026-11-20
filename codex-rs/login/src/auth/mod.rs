@@ -29,4 +29,6 @@ pub use change_state::RequestAuthChange;
 pub use error::RefreshTokenFailedError;
 pub use error::RefreshTokenFailedReason;
 pub use manager::*;
+pub use storage::CX_CREDENTIAL_HOME_ENV_VAR;
+pub use storage::credential_home;
 pub use workload_identity::is_workload_identity_selected;

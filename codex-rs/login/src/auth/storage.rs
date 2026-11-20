@@ -168,6 +168,16 @@ pub(super) fn get_auth_file(codex_home: &Path) -> PathBuf {
     codex_home.join("auth.json")
 }
 
+/// CX account profiles share one Codex home; only their credentials live apart.
+pub const CX_CREDENTIAL_HOME_ENV_VAR: &str = "CODEX_INTERNAL_CX_AUTH_HOME";
+
+/// The directory holding the credentials used with `codex_home`.
+pub fn credential_home(codex_home: &Path) -> PathBuf {
+    std::env::var_os(CX_CREDENTIAL_HOME_ENV_VAR)
+        .filter(|home| !home.is_empty())
+        .map_or_else(|| codex_home.to_path_buf(), PathBuf::from)
+}
+
 pub(super) fn delete_file_if_exists(codex_home: &Path) -> std::io::Result<bool> {
     let auth_file = get_auth_file(codex_home);
     match std::fs::remove_file(&auth_file) {
@@ -703,7 +713,12 @@ pub(super) fn create_auth_storage(
     keyring_backend_kind: AuthKeyringBackendKind,
 ) -> Arc<dyn AuthStorageBackend> {
     let keyring_store: Arc<dyn KeyringStore> = Arc::new(DefaultKeyringStore);
-    create_auth_storage_with_store(codex_home, mode, keyring_store, keyring_backend_kind)
+    create_auth_storage_with_store(
+        credential_home(&codex_home),
+        mode,
+        keyring_store,
+        keyring_backend_kind,
+    )
 }
 
 fn create_auth_storage_with_store(

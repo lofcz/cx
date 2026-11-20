@@ -1,5 +1,6 @@
-//! Profile selection happens before starting a runtime. A worker, its auth refreshes,
-//! its session history and any reset redemption all stay in the same Codex home.
+//! Profile selection happens before starting a runtime. Every profile shares one Codex
+//! home (configuration, sessions, history); only each profile's credentials and quota
+//! cache live apart under `cx-accounts/profile-NAME`.
 use std::fs;
 use std::io::{self, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
@@ -89,7 +90,7 @@ fn account_name(name: &str) -> std::result::Result<String, String> {
     Ok(name.to_owned())
 }
 
-fn home(root: &Path, name: &str) -> PathBuf {
+fn credentials(root: &Path, name: &str) -> PathBuf {
     if name == "default" {
         root.to_owned()
     } else {
@@ -152,9 +153,14 @@ fn profile_command(root: &Path, name: &str) -> Result<Command> {
         .env_remove(codex_login::CODEX_API_KEY_ENV_VAR)
         .env(ROOT, root)
         .env(PIN, name)
-        .env("CODEX_HOME", home(root, name));
-    if name != "default" {
-        cmd.env_remove(codex_state::SQLITE_HOME_ENV);
+        .env("CODEX_HOME", root);
+    if name == "default" {
+        cmd.env_remove(codex_login::CX_CREDENTIAL_HOME_ENV_VAR);
+    } else {
+        cmd.env(
+            codex_login::CX_CREDENTIAL_HOME_ENV_VAR,
+            credentials(root, name),
+        );
     }
     Ok(cmd)
 }
@@ -171,7 +177,7 @@ fn create_home(path: &Path) -> io::Result<()> {
 }
 
 fn launch(root: &Path, name: &str, create: bool, remote_control_disabled: bool) -> Result<()> {
-    let path = home(root, name);
+    let path = credentials(root, name);
     if create {
         create_home(&path)?;
     }
@@ -224,17 +230,20 @@ pub(super) async fn dispatch(
         }
         Err(err) => return Err(err.into()),
     };
+    let same = |a: &Path, b: &Path| {
+        a.canonicalize()
+            .is_ok_and(|a| b.canonicalize().is_ok_and(|b| a == b))
+    };
     let inherited = std::env::var_os(ROOT)
         .map(PathBuf::from)
         .zip(std::env::var(PIN).ok())
         .filter(|(root, name)| {
             account_name(name).is_ok()
-                && home(root, name).canonicalize().is_ok_and(|path| {
-                    current
-                        .as_path()
-                        .canonicalize()
-                        .is_ok_and(|active| active == path)
-                })
+                && same(root, current.as_path())
+                && same(
+                    &codex_login::credential_home(root),
+                    &credentials(root, name),
+                )
         });
     let root = inherited
         .as_ref()
@@ -273,20 +282,33 @@ pub(super) async fn dispatch(
                         && !matches!(command, Some(Subcommand::Login(_) | Subcommand::Logout(_))),
                     "Select a specific account with --account NAME"
                 );
-                ensure!(
-                    command.is_none()
-                        || matches!(command, Some(Subcommand::Review(_)))
-                        || matches!(command, Some(Subcommand::Exec(exec)) if matches!(exec.command, None | Some(codex_exec::Command::Review(_)))),
-                    "Use --account NAME for commands acting on existing account state"
-                );
-                let name = choose(&statuses(root, overrides).await?)?;
-                eprintln!("Using account {name}");
-                name
+                // Profiles share one home, so any session can continue on any account.
+                // Commands that never reach the model skip the quota check.
+                if command.is_none()
+                    || matches!(
+                        command,
+                        Some(
+                            Subcommand::Resume(_)
+                                | Subcommand::Fork(_)
+                                | Subcommand::Agents(_)
+                                | Subcommand::Exec(_)
+                                | Subcommand::Review(_)
+                                | Subcommand::Queue(_)
+                                | Subcommand::AppServer(_)
+                        )
+                    )
+                {
+                    let name = choose(&statuses(root, overrides).await?)?;
+                    eprintln!("Using account {name}");
+                    name
+                } else {
+                    "default".to_string()
+                }
             }
         } else {
             name.to_string()
         };
-        let removed = home(root, &chosen).join("cx-account-removed");
+        let removed = credentials(root, &chosen).join("cx-account-removed");
         let login = matches!(command, Some(Subcommand::Login(options)) if options.action.is_none());
         if chosen != "default" && removed.try_exists()? {
             ensure!(
@@ -322,7 +344,7 @@ pub(super) async fn dispatch(
     } else {
         transfer_auth(&config, options.import_auth)?;
         if options.import_auth && pinned.is_some_and(|name| name != "default") {
-            let marker = current.join("cx-account-removed");
+            let marker = codex_login::credential_home(&current).join("cx-account-removed");
             if marker.try_exists()? {
                 fs::remove_file(marker)?;
             }
@@ -432,12 +454,14 @@ async fn quota(config: &Config) -> Result<Quota> {
     );
     let account_id = auth.get_account_id().context("Missing account identity")?;
     let user_id = auth.get_chatgpt_user_id();
-    let cache_path = config.codex_home.join("cx-account-quota.json");
+    let account_home = codex_login::credential_home(&config.codex_home);
+    fs::create_dir_all(&account_home)?;
+    let cache_path = account_home.join("cx-account-quota.json");
     let lock = fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
-        .open(config.codex_home.join("cx-account-quota.lock"))?;
+        .open(account_home.join("cx-account-quota.lock"))?;
     lock.lock()?;
     let now = chrono::Utc::now().timestamp();
     if let Some(cache) = fs::read(&cache_path)
@@ -493,7 +517,7 @@ async fn quota(config: &Config) -> Result<Quota> {
         reset_credits: usage.rate_limit_reset_credits.map(|v| v.available_count),
         available,
     };
-    let mut tmp = tempfile::NamedTempFile::new_in(&config.codex_home)?;
+    let mut tmp = tempfile::NamedTempFile::new_in(&account_home)?;
     let cache = CachedQuota {
         checked_at: now,
         backend: config.chatgpt_base_url.clone(),
@@ -577,7 +601,7 @@ async fn manage(root: &Path, accounts: &Accounts, overrides: &CliConfigOverrides
                 name != "auto" && (!(add || remove) || name != "default"),
                 "Choose a named account"
             );
-            let profile = home(root, name);
+            let profile = credentials(root, name);
             let marker = profile.join("cx-account-removed");
             if add {
                 ensure!(
